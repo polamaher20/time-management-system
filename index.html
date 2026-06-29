@@ -639,10 +639,11 @@
           <th>البداية</th>
           <th>النهاية</th>
           <th>الحالة</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="historyBody">
-        <tr><td colspan="8" class="empty-history">لا توجد حجوزات بعد</td></tr>
+        <tr><td colspan="9" class="empty-history">لا توجد حجوزات بعد</td></tr>
       </tbody>
     </table></div>
   </div>
@@ -672,16 +673,16 @@
 // type: 'pair'   -> two units, always 2 players facing each other
 
 const UNITS = [
-  // PlayStation PS4 x2
+  // PlayStation PS4 x2 — فردي: ربع=8، نص=10، ساعة=20 | مالتي: +10ج/ربع
   { id:'ps4a', label:'PS4 - جهاز 1', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:15, 30:25, 60:45, 120:80}, doubleExtra:5, hasModes:true },
+    basePrice:{15:8, 30:10, 60:20}, doubleExtra:10, hasModes:true },
   { id:'ps4b', label:'PS4 - جهاز 2', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:15, 30:25, 60:45, 120:80}, doubleExtra:5, hasModes:true },
-  // PlayStation PS3 x2
+    basePrice:{15:8, 30:10, 60:20}, doubleExtra:10, hasModes:true },
+  // PlayStation PS3 x2 — فردي: ربع=5، نص=8، ساعة=15 | مالتي: +5ج/ربع
   { id:'ps3a', label:'PS3 - جهاز 1', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:10, 30:20, 60:40, 120:75}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:8, 60:15}, doubleExtra:5, hasModes:true },
   { id:'ps3b', label:'PS3 - جهاز 2', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:10, 30:20, 60:40, 120:75}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:8, 60:15}, doubleExtra:5, hasModes:true },
   // Ping Pong x2
   { id:'ping1', label:'بينج بونج - تربيزة 1', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
@@ -715,7 +716,15 @@ let alarmCtx = null;
 
 // ─── PRICE CALC ───────────────────────────────────────────────────────────────
 function calcPrice(unit, dur, mode) {
-  const base = unit.basePrice[dur] ?? Math.round((dur / 15) * unit.basePrice[15]);
+  let base;
+  if (unit.basePrice[dur] !== undefined) {
+    base = unit.basePrice[dur];
+  } else {
+    // للمدد غير المحددة: احسب نسبة من أعلى سعر موجود (الساعة)
+    const maxDur = Math.max(...Object.keys(unit.basePrice).map(Number));
+    const maxPrice = unit.basePrice[maxDur];
+    base = Math.round((dur / maxDur) * maxPrice);
+  }
   if (mode === 'double' || mode === 'pair') {
     const quarters = Math.ceil(dur / 15);
     return base + (unit.doubleExtra * quarters);
@@ -1105,9 +1114,9 @@ function endBooking(id) {
 function updateHistory() {
   const tbody = document.getElementById('historyBody');
   if(!history.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-history">لا توجد حجوزات بعد</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-history">لا توجد حجوزات بعد</td></tr>';
   } else {
-    tbody.innerHTML = history.slice(0,50).map(h=>`
+    tbody.innerHTML = history.slice(0,50).map((h,i)=>`
       <tr>
         <td data-label="اللعبة">${h.game}</td>
         <td data-label="الاسم">${h.name}</td>
@@ -1117,10 +1126,23 @@ function updateHistory() {
         <td data-label="البداية">${formatTime(h.startTime)}</td>
         <td data-label="النهاية">${h.endTime?formatTime(h.endTime):'—'}</td>
         <td data-label="الحالة"><span class="badge ${h.status==='active'?'badge-active':'badge-completed'}">${h.status==='active'?'نشط':'منتهي'}</span></td>
+        <td><button onclick="deleteHistoryEntry(${i})" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--danger);padding:0.2rem 0.4rem" title="حذف">🗑️</button></td>
       </tr>`).join('');
   }
   saveHistory();
   updateDailySummary();
+}
+
+function deleteHistoryEntry(i) {
+  // لو الحجز نشط، أوقفه الأول
+  const h = history[i];
+  if (h && h.status === 'active') {
+    const unit = UNITS.find(u => u.label === h.game);
+    if (unit && bookings[unit.id]) endBooking(unit.id);
+  }
+  history.splice(i, 1);
+  saveHistory();
+  updateHistory();
 }
 
 function clearHistory() {
