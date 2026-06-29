@@ -408,18 +408,21 @@
   }
   .dur-tab {
     flex: 1;
-    min-width: 50px;
-    padding: 0.4rem 0.3rem;
+    min-width: 0;
+    padding: 0.35rem 0.2rem;
     border-radius: 7px;
     border: 1.5px solid var(--border);
     background: var(--surface2);
     color: var(--text-muted);
     font-family: 'Cairo', sans-serif;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.18s;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+    text-align: center;
   }
   .dur-tab.active {
     background: var(--surface);
@@ -560,13 +563,15 @@
   }
 
   /* RESPONSIVE TABLE */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .history-section table { min-width: 600px; }
   @media (max-width: 640px) {
+    .history-section table { min-width: unset; }
     .history-section table thead { display: none; }
     .history-section table, .history-section tbody, .history-section tr, .history-section td { display: block; width: 100%; }
-    .history-section tr { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.6rem; padding: 0.5rem 0.75rem; background: var(--surface); }
-    .history-section td { padding: 0.25rem 0; font-size: 0.8rem; display: flex; justify-content: space-between; border: none; }
-    .history-section td::before { content: attr(data-label); color: var(--text-muted); font-weight: 600; margin-left: 0.5rem; }
+    .history-section tr { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.6rem; padding: 0.4rem 0.75rem; background: var(--surface); }
+    .history-section td { padding: 0.2rem 0; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; border: none; gap: 0.5rem; }
+    .history-section td::before { content: attr(data-label); color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
   }
 </style>
 </head>
