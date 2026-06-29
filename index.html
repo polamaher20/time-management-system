@@ -56,10 +56,10 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.75rem;
-    position: sticky;
-    top: 0;
+    position: relative;
     z-index: 100;
     box-shadow: 0 2px 16px var(--shadow);
+    transition: transform 0.35s ease;
   }
 
   .header-brand {
@@ -100,7 +100,7 @@
   /* Sub-navbar controls bar */
   .floating-controls {
     position: sticky;
-    top: 72px;
+    top: 0;
     z-index: 99;
     background: var(--surface2);
     border-bottom: 1px solid var(--border);
@@ -733,6 +733,28 @@ function updateClock() {
   document.getElementById('liveClock').textContent = `${pad(h12)}:${pad(m)}:${pad(s)} ${ampm}`;
 }
 setInterval(updateClock, 1000); updateClock();
+
+// ─── SCROLL HIDE HEADER ───────────────────────────────────────────────────────
+(function() {
+  const header = document.querySelector('header');
+  let lastScroll = 0;
+  window.addEventListener('scroll', () => {
+    const curr = window.scrollY;
+    if (curr > lastScroll && curr > 10) {
+      // سكرول للأسفل - اخفي الهيدر
+      header.style.transform = 'translateY(-110%)';
+      header.style.position = 'fixed';
+      header.style.top = '0';
+      header.style.width = '100%';
+    } else if (curr < 10) {
+      // رجعنا للأعلى - أظهر الهيدر طبيعي
+      header.style.transform = '';
+      header.style.position = 'relative';
+      header.style.width = '';
+    }
+    lastScroll = curr;
+  }, { passive: true });
+})();
 
 document.getElementById('themeToggle').addEventListener('click', () => {
   isDark = !isDark;
