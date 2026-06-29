@@ -735,20 +735,26 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 function startAlarm(id) {
   if (activeAlarms[id]) return;
   activeAlarms[id] = true;
-  function beep() {
+  function playPattern() {
     if (!activeAlarms[id]) return;
     try {
       if (!alarmCtx) alarmCtx = new (window.AudioContext||window.webkitAudioContext)();
-      const osc = alarmCtx.createOscillator(), gain = alarmCtx.createGain();
-      osc.connect(gain); gain.connect(alarmCtx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.35, alarmCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, alarmCtx.currentTime + 0.5);
-      osc.start(); osc.stop(alarmCtx.currentTime + 0.5);
+      // لو الـ context متوقف (بسبب browser policy)، حاول تشغله
+      if (alarmCtx.state === 'suspended') alarmCtx.resume();
+      // بيعزف 3 نغمات بعد بعض
+      [880, 1046, 880].forEach((freq, i) => {
+        const osc = alarmCtx.createOscillator(), gain = alarmCtx.createGain();
+        osc.connect(gain); gain.connect(alarmCtx.destination);
+        osc.frequency.value = freq;
+        const t = alarmCtx.currentTime + i * 0.18;
+        gain.gain.setValueAtTime(0.4, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        osc.start(t); osc.stop(t + 0.15);
+      });
     } catch(e) {}
-    setTimeout(beep, 1200);
+    setTimeout(playPattern, 1500);
   }
-  beep();
+  playPattern();
 }
 function stopAlarm(id) { delete activeAlarms[id]; }
 
@@ -762,8 +768,10 @@ function showToast(icon, title, msg, type='info', alarmId=null) {
     : `<button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
   t.innerHTML = `<span class="toast-icon">${icon}</span><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div>${closeBtn}`;
   container.appendChild(t);
-  if (alarmId) startAlarm(alarmId);
-  else setTimeout(() => t.remove(), 4000);
+  // الصوت بيبدأ من tickBooking قبل ما نمسح الـ booking
+  // لو مفيش alarm جاري خليه يبدأ هنا (للتأكد)
+  if (alarmId && !activeAlarms[alarmId]) startAlarm(alarmId);
+  if (!alarmId) setTimeout(() => t.remove(), 4000);
 }
 
 // ─── CONFIRM DIALOG ───────────────────────────────────────────────────────────
@@ -795,7 +803,16 @@ function saveBookings() {
 function loadHistory() {
   try {
     const raw = localStorage.getItem(LS_H);
-    if (raw) { history = JSON.parse(raw); history.forEach(h => { if(h.status==='active') h.status='completed'; }); saveHistory(); }
+    if (raw) {
+      history = JSON.parse(raw);
+      history.forEach(h => {
+        // فقط غيّر لـ "منتهي" لو الوقت الفعلي خلص فعلاً
+        if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) {
+          h.status = 'completed';
+        }
+      });
+      saveHistory();
+    }
   } catch(e){}
 }
 function loadBookings() {
@@ -805,7 +822,7 @@ function loadBookings() {
     const saved = JSON.parse(raw);
     Object.entries(saved).forEach(([id,b]) => {
       if (b.endTime > Date.now()) {
-        warned[id] = false;
+        const remOnLoad = b.endTime - Date.now(); warned[id] = remOnLoad <= 5 * 60000;
         bookings[id] = { ...b, intervalId: setInterval(() => tickBooking(id), 1000) };
       }
     });
@@ -1021,17 +1038,20 @@ function tickBooking(id) {
     if(!cls || cls==='') ring.style.stroke = unit?.accentColor || '';
     else ring.style.stroke = cls==='danger'?'var(--danger)':'var(--warning)';
   }
-  if(!warned[id] && rem>0 && rem<=5*60000) {
+  if(!warned[id] && rem>0 && rem<=5*60000 && b.duration*60000 > 5*60000) {
     warned[id]=true;
     const unit = UNITS.find(u=>u.id===id);
     showToast('⏰',`تحذير - ${unit?.label}`,`باقي 5 دقائق لـ ${b.name}`,'warning');
   }
   if(rem<=0) {
     const unit = UNITS.find(u=>u.id===id);
+    // أوقف الـ interval الأول عشان منعيدش ندخل هنا
+    clearInterval(b.intervalId);
+    // ابدأ الصوت الأول
+    startAlarm(id);
     showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
     const entry = history.find(h=>h.name===b.name&&h.status==='active'&&h.game===unit?.label);
     if(entry) entry.status='completed';
-    clearInterval(b.intervalId);
     delete bookings[id]; delete warned[id];
     saveBookings(); updateHistory(); renderGames();
   }
