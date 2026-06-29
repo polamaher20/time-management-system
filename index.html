@@ -148,12 +148,17 @@
   }
 
   /* GAMES GRID */
-  .games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.25rem;
-    margin-bottom: 2rem;
+  .games-grid { display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2rem; }
+  .game-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .game-group-label {
+    font-family: 'Amiri', serif; font-size: 0.9rem; font-weight: 700;
+    color: var(--text-muted); padding: 0 0.25rem;
+    display: flex; align-items: center; gap: 0.4rem;
   }
+  .game-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .game-group-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .game-group-cards.solo { grid-template-columns: 1fr; max-width: 500px; }
+  @media (max-width: 560px) { .game-group-cards { grid-template-columns: 1fr; } }
 
   .game-card {
     background: var(--surface);
@@ -553,6 +558,16 @@
     header { padding: 0.5rem 0.75rem; }
     main { padding: 1rem 0.75rem; }
   }
+
+  /* RESPONSIVE TABLE */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 640px) {
+    .history-section table thead { display: none; }
+    .history-section table, .history-section tbody, .history-section tr, .history-section td { display: block; width: 100%; }
+    .history-section tr { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.6rem; padding: 0.5rem 0.75rem; background: var(--surface); }
+    .history-section td { padding: 0.25rem 0; font-size: 0.8rem; display: flex; justify-content: space-between; border: none; }
+    .history-section td::before { content: attr(data-label); color: var(--text-muted); font-weight: 600; margin-left: 0.5rem; }
+  }
 </style>
 </head>
 <body>
@@ -579,14 +594,33 @@
   <div class="section-title">🎮 الألعاب المتاحة</div>
 
   <div class="games-grid" id="gamesGrid">
-    <!-- Cards injected by JS -->
+    <div class="game-group">
+      <div class="game-group-label">🎮 بلايستيشن 4</div>
+      <div class="game-group-cards" id="group-ps4"></div>
+    </div>
+    <div class="game-group">
+      <div class="game-group-label">🕹️ بلايستيشن 3</div>
+      <div class="game-group-cards" id="group-ps3"></div>
+    </div>
+    <div class="game-group">
+      <div class="game-group-label">🏓 بينج بونج</div>
+      <div class="game-group-cards" id="group-ping"></div>
+    </div>
+    <div class="game-group">
+      <div class="game-group-label">🏒 هوكي هواء</div>
+      <div class="game-group-cards" id="group-hockey"></div>
+    </div>
+    <div class="game-group">
+      <div class="game-group-label">🎱 بلياردو</div>
+      <div class="game-group-cards solo" id="group-billiard"></div>
+    </div>
   </div>
 
   <div class="section-title" style="margin-top:1rem">
     📋 سجل الحجوزات
     <button onclick="clearHistory()" style="margin-right:auto;margin-left:0;padding:0.3rem 0.8rem;border-radius:7px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:'Cairo',sans-serif;font-size:0.78rem;font-weight:600;cursor:pointer;" onmouseover="this.style.background='var(--danger)';this.style.color='white'" onmouseout="this.style.background='transparent';this.style.color='var(--danger)'">🗑️ مسح الكل</button>
   </div>
-  <div class="history-section">
+  <div class="history-section"><div class="table-wrap">
     <table>
       <thead>
         <tr>
@@ -603,7 +637,7 @@
       <tbody id="historyBody">
         <tr><td colspan="8" class="empty-history">لا توجد حجوزات بعد</td></tr>
       </tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="section-title" style="margin-top:2rem">📊 ملخص اليوم</div>
@@ -624,510 +658,465 @@
 </main>
 
 <script>
-const GAMES = [
-  { id: 'ps', label: 'بلايستيشن', icon: '🎮', class: 'ps-card', prices: { 30: 15, 60: 25, 120: 45 } },
-  { id: 'ping', label: 'بينج بونج', icon: '🏓', class: 'ping-card', prices: { 30: 10, 60: 18, 120: 30 } },
-  { id: 'billiard', label: 'بلياردو', icon: '🎱', class: 'billiard-card', prices: { 30: 12, 60: 20, 120: 35 } },
-  { id: 'hockey', label: 'هوكي هواء', icon: '🏒', class: 'hockey-card', prices: { 30: 10, 60: 18, 120: 30 } },
+// ─── GAME DEFINITIONS ─────────────────────────────────────────────────────────
+// Each unit has: id, label, icon, cardClass, accentColor, type
+// type: 'multi'  -> has sub-units (PS4/PS3, tables, etc.)
+// type: 'single' -> one unit, fardي only
+// type: 'pair'   -> two units, always 2 players facing each other
+
+const UNITS = [
+  // PlayStation PS4 x2
+  { id:'ps4a', label:'PS4 - جهاز 1', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
+    basePrice:{15:15, 30:25, 60:45, 120:80}, doubleExtra:5, hasModes:true },
+  { id:'ps4b', label:'PS4 - جهاز 2', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
+    basePrice:{15:15, 30:25, 60:45, 120:80}, doubleExtra:5, hasModes:true },
+  // PlayStation PS3 x2
+  { id:'ps3a', label:'PS3 - جهاز 1', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
+    basePrice:{15:10, 30:20, 60:40, 120:75}, doubleExtra:5, hasModes:true },
+  { id:'ps3b', label:'PS3 - جهاز 2', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
+    basePrice:{15:10, 30:20, 60:40, 120:75}, doubleExtra:5, hasModes:true },
+  // Ping Pong x2
+  { id:'ping1', label:'بينج بونج - تربيزة 1', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+  { id:'ping2', label:'بينج بونج - تربيزة 2', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+  // Billiard x1
+  { id:'billiard', label:'بلياردو', parent:'billiard', icon:'🎱', cardClass:'billiard-card', accentColor:'#1A6B3C',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+  // Air Hockey x2 (always 2 players facing each other = pair mode only)
+  { id:'hockey1', label:'هوكي هواء - طاولة 1', parent:'hockey', icon:'🏒', cardClass:'hockey-card', accentColor:'#1A4A8B',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false },
+  { id:'hockey2', label:'هوكي هواء - طاولة 2', parent:'hockey', icon:'🏒', cardClass:'hockey-card', accentColor:'#1A4A8B',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false },
 ];
 
-let bookings = {}; // id -> { name, duration, startTime, endTime, intervalId }
-let history = [];
-let isDark = false;
-let warned = {}; // id -> bool
+const DUR_OPTS = [
+  { val:15, label:'ربع ساعة' },
+  { val:30, label:'نص ساعة' },
+  { val:60, label:'ساعة' },
+  { val:120, label:'ساعتين' },
+  { val:'custom', label:'✏️ تخصيص' },
+];
 
-// Clock - 12h format
+let bookings = {};   // unitId -> booking obj
+let history  = [];
+let gameState = {};  // unitId -> { dur, mode }
+let isDark = false;
+let warned = {};
+let activeAlarms = {};
+let alarmCtx = null;
+
+// ─── PRICE CALC ───────────────────────────────────────────────────────────────
+function calcPrice(unit, dur, mode) {
+  const base = unit.basePrice[dur] ?? Math.round((dur / 15) * unit.basePrice[15]);
+  if (mode === 'double' || mode === 'pair') {
+    const quarters = Math.ceil(dur / 15);
+    return base + (unit.doubleExtra * quarters);
+  }
+  return base;
+}
+
+// ─── CLOCK ────────────────────────────────────────────────────────────────────
 function updateClock() {
   const now = new Date();
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const s = now.getSeconds();
+  const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
   const ampm = h >= 12 ? 'م' : 'ص';
   const h12 = h % 12 || 12;
-  const pad = n => String(n).padStart(2, '0');
+  const pad = n => String(n).padStart(2,'0');
   document.getElementById('liveClock').textContent = `${pad(h12)}:${pad(m)}:${pad(s)} ${ampm}`;
 }
-setInterval(updateClock, 1000);
-updateClock();
+setInterval(updateClock, 1000); updateClock();
 
-// Theme
 document.getElementById('themeToggle').addEventListener('click', () => {
   isDark = !isDark;
   document.body.classList.toggle('dark', isDark);
   document.getElementById('themeToggle').textContent = isDark ? '☀️' : '🌙';
 });
 
-let gameState = {}; // id -> { dur, mode, custom }
+// ─── ALARM ────────────────────────────────────────────────────────────────────
+function startAlarm(id) {
+  if (activeAlarms[id]) return;
+  activeAlarms[id] = true;
+  function beep() {
+    if (!activeAlarms[id]) return;
+    try {
+      if (!alarmCtx) alarmCtx = new (window.AudioContext||window.webkitAudioContext)();
+      const osc = alarmCtx.createOscillator(), gain = alarmCtx.createGain();
+      osc.connect(gain); gain.connect(alarmCtx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.35, alarmCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, alarmCtx.currentTime + 0.5);
+      osc.start(); osc.stop(alarmCtx.currentTime + 0.5);
+    } catch(e) {}
+    setTimeout(beep, 1200);
+  }
+  beep();
+}
+function stopAlarm(id) { delete activeAlarms[id]; }
 
-function getPrice(game, dur, mode) {
-  const base = game.prices[dur] || Math.round((dur / 30) * game.prices[30]);
-  return mode === 'double' ? Math.round(base * 1.8) : base;
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(icon, title, msg, type='info', alarmId=null) {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const closeBtn = alarmId
+    ? `<button class="toast-close" onclick="stopAlarm('${alarmId}');this.closest('.toast').remove()">🔇 إيقاف</button>`
+    : `<button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
+  t.innerHTML = `<span class="toast-icon">${icon}</span><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div>${closeBtn}`;
+  container.appendChild(t);
+  if (alarmId) startAlarm(alarmId);
+  else setTimeout(() => t.remove(), 4000);
 }
 
-function updatePriceBadge(id) {
-  const game = GAMES.find(g => g.id === id);
-  const st = gameState[id] || { dur: 30, mode: 'single' };
-  const priceEl = document.getElementById(`price-${id}`);
-  const modeLabel = document.getElementById(`mode-label-${id}`);
-  if (priceEl) priceEl.textContent = getPrice(game, st.dur, st.mode) + ' جنيه';
-  if (modeLabel) modeLabel.textContent = st.mode === 'double' ? '· زوجي (×1.8)' : '· فردي';
+// ─── CONFIRM DIALOG ───────────────────────────────────────────────────────────
+function showConfirm(msg, onYes) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:16px;padding:1.5rem;max-width:320px;width:90%;text-align:center;border:2px solid var(--danger);font-family:Cairo,sans-serif;direction:rtl';
+  box.innerHTML = `<div style="font-size:2rem;margin-bottom:0.5rem">&#128465;</div><div style="font-weight:700;color:var(--text);font-size:0.95rem">${msg}</div><div style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem"><button id="cNo" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-weight:600;cursor:pointer">&#1573;&#1604;&#1594;&#1575;&#1569;</button><button id="cYes" style="flex:1;padding:0.55rem;border-radius:8px;border:none;background:var(--danger);color:white;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">&#1605;&#1587;&#1581;</button></div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  box.querySelector('#cNo').onclick = () => overlay.remove();
+  box.querySelector('#cYes').onclick = () => { overlay.remove(); onYes(); };
+  overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
 }
 
+// ─── LOCALSTORAGE ─────────────────────────────────────────────────────────────
+const LS_H = 'church_history_v2', LS_B = 'church_bookings_v2';
+function saveHistory() { try { localStorage.setItem(LS_H, JSON.stringify(history)); } catch(e){} }
+function saveBookings() {
+  try {
+    const s = {};
+    Object.entries(bookings).forEach(([id,b]) => {
+      s[id] = { name:b.name, duration:b.duration, startTime:b.startTime, endTime:b.endTime, price:b.price, mode:b.mode, unitLabel:b.unitLabel };
+    });
+    localStorage.setItem(LS_B, JSON.stringify(s));
+  } catch(e){}
+}
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(LS_H);
+    if (raw) { history = JSON.parse(raw); history.forEach(h => { if(h.status==='active') h.status='completed'; }); saveHistory(); }
+  } catch(e){}
+}
+function loadBookings() {
+  try {
+    const raw = localStorage.getItem(LS_B);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.entries(saved).forEach(([id,b]) => {
+      if (b.endTime > Date.now()) {
+        warned[id] = false;
+        bookings[id] = { ...b, intervalId: setInterval(() => tickBooking(id), 1000) };
+      }
+    });
+  } catch(e){}
+}
+
+// ─── TIMER HELPERS ────────────────────────────────────────────────────────────
+function formatRemaining(id) {
+  const b = bookings[id]; if(!b) return '--:--';
+  const rem = Math.max(0, b.endTime - Date.now());
+  const m = Math.floor(rem/60000), s = Math.floor((rem%60000)/1000);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function getRingOffset(id) {
+  const b = bookings[id]; if(!b) return 188.5;
+  return 188.5 * Math.min((Date.now()-b.startTime)/(b.duration*60000), 1);
+}
+function getRingClass(id) {
+  const b = bookings[id]; if(!b) return '';
+  const pct = (b.endTime-Date.now())/(b.duration*60000);
+  if(pct<=0.1) return 'danger'; if(pct<=0.25) return 'warning'; return '';
+}
+
+// ─── RENDER CARDS ─────────────────────────────────────────────────────────────
+const GROUP_MAP = {
+  'ps4a':'ps4','ps4b':'ps4',
+  'ps3a':'ps3','ps3b':'ps3',
+  'ping1':'ping','ping2':'ping',
+  'billiard':'billiard',
+  'hockey1':'hockey','hockey2':'hockey',
+};
+
+function renderGames() {
+  // Clear groups
+  ['ps4','ps3','ping','hockey','billiard'].forEach(g => {
+    const el = document.getElementById('group-'+g);
+    if(el) el.innerHTML = '';
+  });
+  UNITS.forEach(u => {
+    const b = bookings[u.id];
+    const busy = !!b;
+    const st = gameState[u.id] || { dur:30, mode: u.hasModes ? 'single' : 'pair' };
+    const accentStyle = `border-top:3px solid ${u.accentColor}`;
+
+    const statusBadge = busy
+      ? `<span class="game-status status-busy">&#9679; مشغول</span>`
+      : `<span class="game-status status-free">&#9679; متاح</span>`;
+
+    // Timer ring
+    const ringOffset = busy ? getRingOffset(u.id) : 188.5;
+    const ringClass = busy ? getRingClass(u.id) : '';
+    const timeDisplay = busy ? formatRemaining(u.id) : '--:--';
+    const timerInfo = busy
+      ? `<div class="booked-for">حجز ${b.duration} د | ${b.mode==='double'?'زوجي':'فردي'}</div>
+         <div class="customer-name">${b.name}</div>
+         <div class="end-time">ينتهي: ${formatTime(b.endTime)}</div>`
+      : `<div class="booked-for" style="color:var(--text-muted)">متاح الآن</div>`;
+
+    // Modes row
+    const modesRow = u.hasModes ? `
+      <div class="form-row">
+        <button type="button" class="mode-btn ${st.mode==='single'?'active':''}" onclick="setMode('${u.id}','single')">&#128100; فردي</button>
+        <button type="button" class="mode-btn ${st.mode==='double'?'active':''}" onclick="setMode('${u.id}','double')">&#128101; زوجي +${u.doubleExtra}ج/ربع</button>
+      </div>` : `<div class="form-row"><div class="mode-btn active" style="text-align:center;pointer-events:none">&#128101; اتنين لاعبين دايماً</div></div>`;
+
+    // Duration tabs
+    const durTabs = DUR_OPTS.map((d,i) => {
+      const isActive = d.val !== 'custom' && st.dur === d.val ? 'active' : (d.val==='custom' && typeof st.dur==='number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===st.dur) ? 'active':'');
+      if (d.val === 'custom') {
+        return `<button type="button" class="dur-tab ${isActive}" id="custom-tab-${u.id}" onclick="toggleCustom('${u.id}')">${d.label}</button>`;
+      }
+      return `<button type="button" class="dur-tab ${st.dur===d.val?'active':''}" onclick="selectDur('${u.id}',${d.val})">${d.label}</button>`;
+    }).join('');
+
+    const price = typeof st.dur === 'number' ? calcPrice(u, st.dur, st.mode) : '—';
+
+    const bookingForm = `
+      <div class="booking-form">
+        <input class="input-field" id="name-${u.id}" placeholder="اسم الشخص / المجموعة" type="text">
+        ${modesRow}
+        <div class="dur-tabs" id="dur-tabs-${u.id}">${durTabs}</div>
+        <div id="custom-input-${u.id}" style="display:none;margin-top:0.25rem">
+          <input class="input-field" type="number" min="1" max="480" placeholder="أدخل الدقائق" id="custom-min-${u.id}" oninput="updateCustomDur('${u.id}')">
+        </div>
+        <div class="price-badge">السعر: <strong id="price-${u.id}">${price}</strong> جنيه <span id="mode-label-${u.id}" style="color:var(--text-muted);font-size:0.68rem">${u.hasModes?(st.mode==='double'?'· زوجي':'· فردي'):'· زوجي'}</span></div>
+        <button class="btn-book" style="background:${u.accentColor};color:white" onclick="book('${u.id}')">&#9989; احجز الآن</button>
+      </div>`;
+
+    const stopBtn = `<button class="btn-stop" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button>`;
+
+    const cardHtml = `
+    <div class="game-card" id="card-${u.id}" style="${accentStyle}">
+      <div class="card-header">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span class="game-icon">${u.icon}</span>
+          <span class="game-title">${u.label}</span>
+        </div>
+        ${statusBadge}
+      </div>
+      <div class="card-body">
+        <div class="timer-section">
+          <div class="ring-wrap">
+            <svg viewBox="0 0 72 72"><circle class="ring-bg" cx="36" cy="36" r="30"/><circle class="ring-progress ${ringClass}" id="ring-${u.id}" cx="36" cy="36" r="30" style="stroke:${u.accentColor};stroke-dashoffset:${ringOffset}"/></svg>
+            <div class="ring-label"><span class="time-display" id="time-${u.id}">${timeDisplay}</span><span style="font-size:0.58rem;color:var(--text-muted)">${busy?'متبقي':'حر'}</span></div>
+          </div>
+          <div class="timer-info">${timerInfo}</div>
+        </div>
+        ${busy ? stopBtn : bookingForm}
+      </div>
+    </div>`;
+    // Inject card into correct group
+    const groupId = 'group-' + (GROUP_MAP[u.id] || 'billiard');
+    const groupEl = document.getElementById(groupId);
+    if (groupEl) {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = cardHtml;
+      groupEl.appendChild(wrapper.firstElementChild);
+    }
+  });
+
+  // Init gameState for free units
+  UNITS.forEach(u => {
+    if (!bookings[u.id]) {
+      gameState[u.id] = gameState[u.id] || { dur:30, mode: u.hasModes?'single':'pair' };
+    }
+  });
+}
+
+// ─── MODE / DUR CONTROLS ──────────────────────────────────────────────────────
 function setMode(id, mode) {
-  gameState[id] = gameState[id] || { dur: 30, mode: 'single' };
+  gameState[id] = gameState[id] || { dur:30, mode:'single' };
   gameState[id].mode = mode;
-  document.getElementById(`mode-single-${id}`)?.classList.toggle('active', mode === 'single');
-  document.getElementById(`mode-double-${id}`)?.classList.toggle('active', mode === 'double');
-  updatePriceBadge(id);
+  const unit = UNITS.find(u=>u.id===id);
+  document.querySelectorAll(`#card-${id} .mode-btn`).forEach((b,i)=>{
+    b.classList.toggle('active', (i===0&&mode==='single')||(i===1&&mode==='double'));
+  });
+  const price = calcPrice(unit, gameState[id].dur, mode);
+  const priceEl = document.getElementById(`price-${id}`);
+  const modeEl = document.getElementById(`mode-label-${id}`);
+  if(priceEl) priceEl.textContent = price;
+  if(modeEl) modeEl.textContent = mode==='double'?'· زوجي':'· فردي';
 }
 
 function selectDur(id, dur) {
-  gameState[id] = gameState[id] || { dur: 30, mode: 'single' };
+  gameState[id] = gameState[id] || { dur:30, mode:'single' };
   gameState[id].dur = dur;
-  gameState[id].custom = false;
-  // Update tab active state
-  const tabs = document.querySelectorAll(`#dur-tabs-${id} .dur-tab`);
-  tabs.forEach(t => t.classList.remove('active'));
-  // Find the right tab
-  const durMap = { 30: 0, 60: 1, 120: 2 };
-  if (durMap[dur] !== undefined && tabs[durMap[dur]]) tabs[durMap[dur]].classList.add('active');
-  // Hide custom input
+  document.querySelectorAll(`#dur-tabs-${id} .dur-tab`).forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
   const ci = document.getElementById(`custom-input-${id}`);
-  if (ci) ci.style.display = 'none';
-  updatePriceBadge(id);
+  if(ci) ci.style.display = 'none';
+  const unit = UNITS.find(u=>u.id===id);
+  const priceEl = document.getElementById(`price-${id}`);
+  if(priceEl) priceEl.textContent = calcPrice(unit, dur, gameState[id].mode);
 }
 
 function toggleCustom(id) {
-  gameState[id] = gameState[id] || { dur: 30, mode: 'single' };
   const ci = document.getElementById(`custom-input-${id}`);
-  const visible = ci?.style.display !== 'none';
-  if (ci) ci.style.display = visible ? 'none' : 'block';
-  if (!visible) {
-    // Deactivate preset tabs
-    const tabs = document.querySelectorAll(`#dur-tabs-${id} .dur-tab`);
-    tabs.forEach(t => t.classList.remove('active'));
+  const showing = ci?.style.display !== 'none';
+  if(ci) ci.style.display = showing ? 'none' : 'block';
+  if(!showing) {
+    document.querySelectorAll(`#dur-tabs-${id} .dur-tab`).forEach(t=>t.classList.remove('active'));
     document.getElementById(`custom-tab-${id}`)?.classList.add('active');
   }
 }
 
 function updateCustomDur(id) {
-  const input = document.getElementById(`custom-min-${id}`);
-  const val = parseInt(input?.value);
-  if (val && val > 0) {
-    gameState[id] = gameState[id] || { dur: 30, mode: 'single' };
+  const val = parseInt(document.getElementById(`custom-min-${id}`)?.value);
+  if(val>0) {
+    gameState[id] = gameState[id] || { dur:30, mode:'single' };
     gameState[id].dur = val;
-    gameState[id].custom = true;
-    updatePriceBadge(id);
+    const unit = UNITS.find(u=>u.id===id);
+    const priceEl = document.getElementById(`price-${id}`);
+    if(priceEl) priceEl.textContent = calcPrice(unit, val, gameState[id].mode);
   }
 }
 
-// Render games
-function renderGames() {
-  const grid = document.getElementById('gamesGrid');
-  grid.innerHTML = GAMES.map(g => {
-    const booking = bookings[g.id];
-    const isBusy = !!booking;
-    return `
-    <div class="game-card ${g.class}" id="card-${g.id}">
-      <div class="card-header">
-        <div style="display:flex;align-items:center;gap:0.5rem">
-          <span class="game-icon">${g.icon}</span>
-          <span class="game-title">${g.label}</span>
-        </div>
-        <span class="game-status ${isBusy ? 'status-busy' : 'status-free'}">
-          ${isBusy ? '● مشغول' : '● متاح'}
-        </span>
-      </div>
-      <div class="card-body">
-        <div class="timer-section">
-          <div class="ring-wrap">
-            <svg viewBox="0 0 72 72">
-              <circle class="ring-bg" cx="36" cy="36" r="30"/>
-              <circle class="ring-progress ${isBusy ? getRingClass(g.id) : ''}" id="ring-${g.id}" cx="36" cy="36" r="30"
-                style="stroke-dashoffset:${isBusy ? getRingOffset(g.id) : '188.5'}"/>
-            </svg>
-            <div class="ring-label">
-              <span class="time-display" id="time-${g.id}">${isBusy ? formatRemaining(g.id) : '--:--'}</span>
-              <span style="font-size:0.58rem;color:var(--text-muted)">${isBusy ? 'متبقي' : 'حر'}</span>
-            </div>
-          </div>
-          <div class="timer-info">
-            ${isBusy ? `
-              <div class="booked-for">حجز لـ ${booking.duration} دقيقة</div>
-              <div class="customer-name">${booking.name}</div>
-              <div class="end-time">ينتهي: ${formatTime(booking.endTime)}</div>
-            ` : `<div class="booked-for" style="color:var(--text-muted)">لا يوجد حجز حالي</div>`}
-          </div>
-        </div>
-
-        ${!isBusy ? `
-        <div class="booking-form" id="form-${g.id}">
-          <input class="input-field" id="name-${g.id}" placeholder="اسم الشخص / المجموعة" type="text">
-
-          <div class="form-row" style="gap:0.5rem">
-            <button type="button" class="mode-btn active" id="mode-single-${g.id}" onclick="setMode('${g.id}','single')">👤 فردي</button>
-            <button type="button" class="mode-btn" id="mode-double-${g.id}" onclick="setMode('${g.id}','double')">👥 زوجي</button>
-          </div>
-
-          <div class="dur-tabs" id="dur-tabs-${g.id}">
-            <button type="button" class="dur-tab active" onclick="selectDur('${g.id}',30)">30 د</button>
-            <button type="button" class="dur-tab" onclick="selectDur('${g.id}',60)">ساعة</button>
-            <button type="button" class="dur-tab" onclick="selectDur('${g.id}',120)">ساعتين</button>
-            <button type="button" class="dur-tab" id="custom-tab-${g.id}" onclick="toggleCustom('${g.id}')">✏️ تخصيص</button>
-          </div>
-          <div id="custom-input-${g.id}" style="display:none;margin-top:0.25rem">
-            <input class="input-field" type="number" min="1" max="480" placeholder="أدخل الدقائق (مثال: 45)" id="custom-min-${g.id}" oninput="updateCustomDur('${g.id}')">
-          </div>
-
-          <div class="price-badge">السعر: <strong id="price-${g.id}">${g.prices[30]} جنيه</strong> <span id="mode-label-${g.id}" style="color:var(--text-muted);font-size:0.68rem">· فردي</span></div>
-          <button class="btn-book" onclick="book('${g.id}')">✅ احجز الآن</button>
-        </div>
-        ` : `
-        <button class="btn-stop" onclick="endBooking('${g.id}')">⏹ إنهاء الحجز</button>
-        `}
-      </div>
-    </div>`;
-  }).join('');
-
-  // Init state for each free game
-  GAMES.forEach(g => {
-    if (!bookings[g.id]) {
-      gameState[g.id] = gameState[g.id] || { dur: 30, mode: 'single', custom: false };
-      updatePriceBadge(g.id);
-    }
-  });
-}
-
-function getRingOffset(id) {
-  const b = bookings[id];
-  if (!b) return 188.5;
-  const total = b.duration * 60 * 1000;
-  const elapsed = Date.now() - b.startTime;
-  const progress = Math.min(elapsed / total, 1);
-  return 188.5 * (1 - (1 - progress)); // offset = 188.5 * progress
-}
-
-function getRingClass(id) {
-  const b = bookings[id];
-  if (!b) return '';
-  const total = b.duration * 60 * 1000;
-  const remaining = b.endTime - Date.now();
-  const pct = remaining / total;
-  if (pct <= 0.1) return 'danger';
-  if (pct <= 0.25) return 'warning';
-  return '';
-}
-
-function formatRemaining(id) {
-  const b = bookings[id];
-  if (!b) return '--:--';
-  const rem = Math.max(0, b.endTime - Date.now());
-  const m = Math.floor(rem / 60000);
-  const s = Math.floor((rem % 60000) / 1000);
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
-
-function formatTime(ts) {
-  return new Date(ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
+// ─── BOOKING ──────────────────────────────────────────────────────────────────
 function book(id) {
-  const nameEl = document.getElementById(`name-${id}`);
-  const name = nameEl ? nameEl.value.trim() : '';
-  if (!name) { showToast('⚠️', 'تنبيه', 'من فضلك أدخل اسم الشخص', 'warning'); return; }
-
-  const st = gameState[id] || { dur: 30, mode: 'single' };
-  const duration = st.dur;
-  if (!duration || duration < 1) { showToast('⚠️', 'تنبيه', 'من فضلك اختر أو أدخل المدة', 'warning'); return; }
-
-  const game = GAMES.find(g => g.id === id);
-  const price = getPrice(game, duration, st.mode);
-  const startTime = Date.now();
-  const endTime = startTime + duration * 60000;
-
-  const intervalId = setInterval(() => tickBooking(id), 1000);
+  const unit = UNITS.find(u=>u.id===id);
+  const name = document.getElementById(`name-${id}`)?.value.trim();
+  if(!name) { showToast('⚠️','تنبيه','من فضلك أدخل اسم الشخص','warning'); return; }
+  const st = gameState[id] || { dur:30, mode:'single' };
+  const dur = st.dur;
+  if(!dur||dur<1) { showToast('⚠️','تنبيه','اختر أو أدخل المدة','warning'); return; }
+  const mode = unit.hasModes ? st.mode : 'pair';
+  const price = calcPrice(unit, dur, mode);
+  const now = Date.now();
+  const endTime = now + dur*60000;
   warned[id] = false;
-
-  bookings[id] = { name, duration, startTime, endTime, intervalId, price, mode: st.mode };
+  bookings[id] = { name, duration:dur, startTime:now, endTime, price, mode, unitLabel:unit.label, intervalId:setInterval(()=>tickBooking(id),1000) };
   saveBookings();
-
-  const modeLabel = st.mode === 'double' ? 'زوجي' : 'فردي';
-  history.unshift({ game: game.label, name, duration, price, startTime, endTime, status: 'active', mode: modeLabel, id: Date.now() });
+  const modeLabel = mode==='double'?'زوجي':(mode==='pair'?'اتنين':'فردي');
+  history.unshift({ game:unit.label, name, duration:dur, price, startTime:now, endTime, status:'active', mode:modeLabel });
   updateHistory();
-
-  showToast('🎮', `تم الحجز - ${game.label}`, `${name} | ${duration} دقيقة | ${modeLabel} | ${price} ج`, 'success', null);
+  showToast('🎮',`تم الحجز - ${unit.label}`,`${name} | ${dur} د | ${modeLabel} | ${price} ج`,'success');
   renderGames();
 }
 
 function tickBooking(id) {
-  const b = bookings[id];
-  if (!b) return;
-
-  const remaining = b.endTime - Date.now();
-
-  // Update ring
-  const ring = document.getElementById(`ring-${id}`);
+  const b = bookings[id]; if(!b) return;
+  const rem = b.endTime - Date.now();
   const timeEl = document.getElementById(`time-${id}`);
-  if (timeEl) timeEl.textContent = formatRemaining(id);
-
-  if (ring) {
-    const total = b.duration * 60000;
-    const progress = Math.min(1 - remaining / total, 1);
-    ring.style.strokeDashoffset = 188.5 * progress;
-    ring.className = 'ring-progress ' + getRingClass(id);
+  const ring = document.getElementById(`ring-${id}`);
+  if(timeEl) timeEl.textContent = formatRemaining(id);
+  if(ring) {
+    ring.style.strokeDashoffset = getRingOffset(id);
+    const cls = getRingClass(id);
+    ring.className = `ring-progress ${cls}`;
+    const unit = UNITS.find(u=>u.id===id);
+    if(!cls || cls==='') ring.style.stroke = unit?.accentColor || '';
+    else ring.style.stroke = cls==='danger'?'var(--danger)':'var(--warning)';
   }
-
-  // Warning at 5 min
-  if (!warned[id] && remaining > 0 && remaining <= 5 * 60000) {
-    warned[id] = true;
-    const game = GAMES.find(g => g.id === id);
-    showToast('⏰', `تحذير - ${game.label}`, `باقي 5 دقائق لـ ${b.name}`, 'warning', null);
+  if(!warned[id] && rem>0 && rem<=5*60000) {
+    warned[id]=true;
+    const unit = UNITS.find(u=>u.id===id);
+    showToast('⏰',`تحذير - ${unit?.label}`,`باقي 5 دقائق لـ ${b.name}`,'warning');
   }
-
-  // Expired
-  if (remaining <= 0) {
-    const game = GAMES.find(g => g.id === id);
-    showToast('🔔', `انتهى الحجز - ${game.label}`, `انتهى وقت ${b.name} — اضغط إيقاف لإسكات التنبيه`, 'expired', id);
-    const entry = history.find(h => h.name === b.name && h.status === 'active');
-    if (entry) entry.status = 'completed';
-    updateHistory();
+  if(rem<=0) {
+    const unit = UNITS.find(u=>u.id===id);
+    showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
+    const entry = history.find(h=>h.name===b.name&&h.status==='active'&&h.game===unit?.label);
+    if(entry) entry.status='completed';
     clearInterval(b.intervalId);
-    delete bookings[id];
-    delete warned[id];
-    saveBookings();
-    renderGames();
+    delete bookings[id]; delete warned[id];
+    saveBookings(); updateHistory(); renderGames();
   }
 }
 
 function endBooking(id) {
-  const b = bookings[id];
-  if (!b) return;
+  const b = bookings[id]; if(!b) return;
+  const unit = UNITS.find(u=>u.id===id);
   clearInterval(b.intervalId);
-  const game = GAMES.find(g => g.id === id);
-  const entry = history.find(h => h.name === b.name && h.status === 'active');
-  if (entry) entry.status = 'completed';
-  updateHistory();
-  showToast('✅', `تم الإنهاء - ${game.label}`, `تم إنهاء حجز ${b.name}`, 'success', null);
+  const entry = history.find(h=>h.name===b.name&&h.status==='active'&&h.game===unit?.label);
+  if(entry) entry.status='completed';
   stopAlarm(id);
-  delete bookings[id];
-  delete warned[id];
-  saveBookings();
+  delete bookings[id]; delete warned[id];
+  saveBookings(); updateHistory();
+  showToast('✅',`تم الإنهاء`,`${unit?.label} — ${b.name}`,'success');
   renderGames();
-}
-
-function updateHistory() {
-  const tbody = document.getElementById('historyBody');
-  if (history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-history">لا توجد حجوزات بعد</td></tr>';
-    return;
-  }
-  tbody.innerHTML = history.slice(0, 20).map(h => `
-    <tr>
-      <td>${h.game}</td>
-      <td>${h.name}</td>
-      <td>${h.mode || 'فردي'}</td>
-      <td>${h.duration} د</td>
-      <td>${h.price} ج</td>
-      <td>${formatTime(h.startTime)}</td>
-      <td><span class="badge ${h.status === 'active' ? 'badge-active' : 'badge-completed'}">${h.status === 'active' ? 'نشط' : 'منتهي'}</span></td>
-    </tr>
-  `).join('');
-}
-
-// ─── ALARM ────────────────────────────────────────────────────────────────────
-let alarmCtx = null;
-let alarmNodes = []; // { osc, gain }
-let activeAlarms = {}; // gameId -> true
-
-function startAlarm(gameId) {
-  if (activeAlarms[gameId]) return;
-  activeAlarms[gameId] = true;
-  try {
-    if (!alarmCtx) alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const playBeep = () => {
-      if (!activeAlarms[gameId]) return;
-      const osc = alarmCtx.createOscillator();
-      const gain = alarmCtx.createGain();
-      osc.connect(gain); gain.connect(alarmCtx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.35, alarmCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, alarmCtx.currentTime + 0.5);
-      osc.start(alarmCtx.currentTime);
-      osc.stop(alarmCtx.currentTime + 0.5);
-      alarmNodes.push({ osc, gain });
-      // Repeat every 1.2s while alarm active
-      setTimeout(() => { if (activeAlarms[gameId]) playBeep(); }, 1200);
-    };
-    playBeep();
-  } catch(e) {}
-}
-
-function stopAlarm(gameId) {
-  delete activeAlarms[gameId];
-}
-
-function stopAllAlarms() {
-  Object.keys(activeAlarms).forEach(k => delete activeAlarms[k]);
-}
-
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(icon, title, msg, type = 'info', gameId = null) {
-  const container = document.getElementById('toastContainer');
-  const toastId = 'toast-' + Date.now();
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.id = toastId;
-  toast.innerHTML = `
-    <span class="toast-icon">${icon}</span>
-    <div class="toast-content">
-      <div class="toast-title">${title}</div>
-      <div class="toast-msg">${msg}</div>
-    </div>
-    ${gameId ? `<button class="toast-close" onclick="stopAlarm('${gameId}');this.closest('.toast').remove()">🔇 إيقاف</button>` : `<button class="toast-close" onclick="this.parentElement.remove()">✕</button>`}
-  `;
-  container.appendChild(toast);
-
-  if (type === 'expired' && gameId) {
-    startAlarm(gameId);
-    // No auto-dismiss for expired — user must close manually
-  } else {
-    setTimeout(() => toast.remove(), 4000);
-  }
-}
-
-// ─── LOCALSTORAGE ─────────────────────────────────────────────────────────────
-const LS_HISTORY = 'church_game_history';
-const LS_BOOKINGS = 'church_game_bookings';
-
-function saveHistory() {
-  try { localStorage.setItem(LS_HISTORY, JSON.stringify(history)); } catch(e) {}
-}
-
-function loadHistory() {
-  try {
-    const raw = localStorage.getItem(LS_HISTORY);
-    if (raw) {
-      history = JSON.parse(raw);
-      // Mark any "active" entries as completed (they were active before refresh)
-      history.forEach(h => { if (h.status === 'active') h.status = 'completed'; });
-      saveHistory();
-    }
-  } catch(e) {}
-}
-
-function saveBookings() {
-  // Save serializable bookings (no intervalId)
-  try {
-    const toSave = {};
-    Object.entries(bookings).forEach(([id, b]) => {
-      toSave[id] = { name: b.name, duration: b.duration, startTime: b.startTime, endTime: b.endTime, price: b.price, mode: b.mode };
-    });
-    localStorage.setItem(LS_BOOKINGS, JSON.stringify(toSave));
-  } catch(e) {}
-}
-
-function loadBookings() {
-  try {
-    const raw = localStorage.getItem(LS_BOOKINGS);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    Object.entries(saved).forEach(([id, b]) => {
-      if (b.endTime > Date.now()) {
-        // Still valid — restore
-        warned[id] = false;
-        bookings[id] = { ...b, intervalId: setInterval(() => tickBooking(id), 1000) };
-      }
-    });
-  } catch(e) {}
 }
 
 // ─── HISTORY ──────────────────────────────────────────────────────────────────
 function updateHistory() {
   const tbody = document.getElementById('historyBody');
-  if (history.length === 0) {
+  if(!history.length) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty-history">لا توجد حجوزات بعد</td></tr>';
   } else {
-    tbody.innerHTML = history.slice(0, 50).map(h => `
+    tbody.innerHTML = history.slice(0,50).map(h=>`
       <tr>
-        <td>${h.game}</td>
-        <td>${h.name}</td>
-        <td>${h.mode || 'فردي'}</td>
-        <td>${h.duration} د</td>
-        <td>${h.price} ج</td>
-        <td>${formatTime(h.startTime)}</td>
-        <td>${h.endTime ? formatTime(h.endTime) : '—'}</td>
-        <td><span class="badge ${h.status === 'active' ? 'badge-active' : 'badge-completed'}">${h.status === 'active' ? 'نشط' : 'منتهي'}</span></td>
-      </tr>
-    `).join('');
+        <td data-label="اللعبة">${h.game}</td>
+        <td data-label="الاسم">${h.name}</td>
+        <td data-label="النوع">${h.mode||'—'}</td>
+        <td data-label="المدة">${h.duration}د</td>
+        <td data-label="السعر">${h.price}ج</td>
+        <td data-label="البداية">${formatTime(h.startTime)}</td>
+        <td data-label="النهاية">${h.endTime?formatTime(h.endTime):'—'}</td>
+        <td data-label="الحالة"><span class="badge ${h.status==='active'?'badge-active':'badge-completed'}">${h.status==='active'?'نشط':'منتهي'}</span></td>
+      </tr>`).join('');
   }
   saveHistory();
   updateDailySummary();
 }
 
 function clearHistory() {
-  showConfirm('هل أنت متأكد من مسح جميع سجلات الحجوزات؟', () => {
-    history = [];
+  showConfirm('هل أنت متأكد من مسح جميع سجلات الحجوزات؟', ()=>{
+    history=[];
     saveHistory();
     updateHistory();
-    showToast('🗑️', 'تم المسح', 'تم مسح جميع الحجوزات', 'info', null);
+    showToast('🗑️','تم المسح','تم مسح جميع الحجوزات','info');
   });
-}
-
-function showConfirm(msg, onYes) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-  overlay.innerHTML = `
-    <div style="background:var(--surface);border-radius:16px;padding:1.5rem;max-width:320px;width:90%;text-align:center;border:2px solid var(--danger);font-family:Cairo,sans-serif;direction:rtl">
-      <div style="font-size:2rem;margin-bottom:0.5rem">&#128465;</div>
-      <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.95rem">${msg}</div>
-      <div style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem">
-        <button onclick="this.closest('div[style]').parentElement.remove()" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-weight:600;cursor:pointer;font-size:0.85rem">&#1573;&#1604;&#1594;&#1575;&#1569;</button>
-        <button id="confirmYes" style="flex:1;padding:0.55rem;border-radius:8px;border:none;background:var(--danger);color:white;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:0.85rem">&#1605;&#1587;&#1581;</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#confirmYes').onclick = () => { overlay.remove(); onYes(); };
-  overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
 }
 
 // ─── DAILY SUMMARY ────────────────────────────────────────────────────────────
 function updateDailySummary() {
   const todayStr = new Date().toDateString();
-  const summary = {};
-  GAMES.forEach(g => { summary[g.id] = { label: g.label, icon: g.icon, minutes: 0, revenue: 0, sessions: 0 }; });
-
-  history.forEach(h => {
-    if (new Date(h.startTime).toDateString() !== todayStr) return;
-    const game = GAMES.find(g => g.label === h.game);
-    if (!game) return;
-    summary[game.id].minutes += h.duration || 0;
-    summary[game.id].revenue += h.price || 0;
-    summary[game.id].sessions += 1;
+  // Group by parent category label
+  const cats = {
+    'ps4': { label:'PS4', icon:'🎮', minutes:0, revenue:0, sessions:0 },
+    'ps3': { label:'PS3', icon:'🕹️', minutes:0, revenue:0, sessions:0 },
+    'ping': { label:'بينج بونج', icon:'🏓', minutes:0, revenue:0, sessions:0 },
+    'billiard': { label:'بلياردو', icon:'🎱', minutes:0, revenue:0, sessions:0 },
+    'hockey': { label:'هوكي هواء', icon:'🏒', minutes:0, revenue:0, sessions:0 },
+  };
+  const labelMap = {
+    'PS4 - جهاز 1':'ps4','PS4 - جهاز 2':'ps4',
+    'PS3 - جهاز 1':'ps3','PS3 - جهاز 2':'ps3',
+    'بينج بونج - تربيزة 1':'ping','بينج بونج - تربيزة 2':'ping',
+    'بلياردو':'billiard',
+    'هوكي هواء - طاولة 1':'hockey','هوكي هواء - طاولة 2':'hockey',
+  };
+  history.forEach(h=>{
+    if(new Date(h.startTime).toDateString()!==todayStr) return;
+    const cat = labelMap[h.game];
+    if(cat && cats[cat]) { cats[cat].minutes+=h.duration||0; cats[cat].revenue+=h.price||0; cats[cat].sessions+=1; }
   });
-
-  const totalRevenue = Object.values(summary).reduce((a, s) => a + s.revenue, 0);
-  const totalMinutes = Object.values(summary).reduce((a, s) => a + s.minutes, 0);
-
-  const tbody = document.getElementById('summaryBody');
-  tbody.innerHTML = GAMES.map(g => {
-    const s = summary[g.id];
-    const hrs = Math.floor(s.minutes / 60);
-    const mins = s.minutes % 60;
-    const timeStr = hrs > 0 ? `${hrs}س ${mins}د` : `${mins}د`;
-    return `
-      <tr>
-        <td>${s.icon} ${s.label}</td>
-        <td>${s.sessions}</td>
-        <td>${timeStr || '—'}</td>
-        <td style="color:var(--gold);font-weight:700">${s.revenue} ج</td>
-      </tr>
-    `;
-  }).join('');
-
+  const totalRev = Object.values(cats).reduce((a,c)=>a+c.revenue,0);
+  const totalMin = Object.values(cats).reduce((a,c)=>a+c.minutes,0);
+  document.getElementById('summaryBody').innerHTML = Object.values(cats).map(c=>`
+    <tr>
+      <td>${c.icon} ${c.label}</td>
+      <td>${c.sessions||'—'}</td>
+      <td>${c.minutes?c.minutes+' د':'—'}</td>
+      <td style="color:var(--gold);font-weight:700">${c.revenue?c.revenue+' ج':'—'}</td>
+    </tr>`).join('');
   document.getElementById('summaryTotal').textContent =
-    `إجمالي اليوم: ${totalRevenue} جنيه  |  إجمالي الوقت: ${totalMinutes} د`;
+    `إجمالي اليوم: ${totalRev} جنيه  |  إجمالي الوقت: ${totalMin} د`;
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
