@@ -579,6 +579,127 @@
   .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .history-section table { min-width: 560px; width: 100%; white-space: nowrap; }
   .history-section th, .history-section td { white-space: nowrap; }
+
+  /* ─── TABS ─────────────────────────────────────────────────────────────── */
+  .tabs-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0;
+  }
+  .tab-btn {
+    padding: 0.5rem 1.1rem;
+    border: none;
+    background: transparent;
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    border-radius: 6px 6px 0 0;
+  }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); background: var(--surface2); }
+  .tab-btn:hover:not(.active) { color: var(--text); background: var(--surface2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ─── MONTHLY REPORT ────────────────────────────────────────────────────── */
+  .month-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .month-controls select, .month-controls input {
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+  }
+  .month-controls select:focus, .month-controls input:focus { border-color: var(--gold); }
+  .month-controls label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+
+  .monthly-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    text-align: center;
+  }
+  .stat-card .stat-val {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--gold);
+    line-height: 1.1;
+  }
+  .stat-card .stat-lbl {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+  }
+
+  .monthly-table th { background: var(--surface2); }
+  .day-row:hover td { background: var(--surface2); cursor: pointer; }
+  .day-row td { font-size: 0.82rem; }
+  .day-row.has-data td:first-child { font-weight: 700; color: var(--gold); }
+  .day-row.today td:first-child { background: rgba(201,168,76,0.12); }
+
+  /* Detail row (games breakdown per day) */
+  .detail-row { display: none; background: var(--surface2); }
+  .detail-row.open { display: table-row; }
+  .detail-row td { padding: 0.4rem 1rem 0.4rem 2.5rem; font-size: 0.78rem; }
+  .game-breakdown { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .game-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 0.2rem 0.6rem; font-size: 0.74rem;
+  }
+  .game-chip strong { color: var(--gold); }
+
+  /* per-game monthly table */
+  .game-monthly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .game-monthly-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .game-monthly-card .gmc-header {
+    padding: 0.6rem 0.85rem;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: white;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .game-monthly-card .gmc-body {
+    padding: 0.6rem 0.85rem;
+    display: flex; justify-content: space-between;
+  }
+  .game-monthly-card .gmc-stat { text-align: center; }
+  .game-monthly-card .gmc-stat .gv { font-size: 1.1rem; font-weight: 800; color: var(--gold); }
+  .game-monthly-card .gmc-stat .gl { font-size: 0.68rem; color: var(--text-muted); }
+
 </style>
 </head>
 <body>
@@ -604,6 +725,14 @@
 </div>
 
 <main>
+  <div class="tabs-bar">
+    <button class="tab-btn active" onclick="switchTab('games')">🎮 الألعاب</button>
+    <button class="tab-btn" onclick="switchTab('history')">📋 السجل</button>
+    <button class="tab-btn" onclick="switchTab('monthly')">📅 التقرير الشهري</button>
+  </div>
+
+  <!-- TAB: GAMES -->
+  <div class="tab-panel active" id="tab-games">
   <div class="section-title">🎮 الألعاب المتاحة</div>
 
   <div class="games-grid" id="gamesGrid">
@@ -633,7 +762,11 @@
     </div>
   </div>
 
-  <div class="section-title" style="margin-top:1rem">
+  </div><!-- end tab-games -->
+
+  <!-- TAB: HISTORY -->
+  <div class="tab-panel" id="tab-history">
+  <div class="section-title" style="margin-top:0">
     📋 سجل الحجوزات
     <button onclick="clearHistory()" style="margin-right:auto;margin-left:0;padding:0.3rem 0.8rem;border-radius:7px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:'Cairo',sans-serif;font-size:0.78rem;font-weight:600;cursor:pointer;" onmouseover="this.style.background='var(--danger)';this.style.color='white'" onmouseout="this.style.background='transparent';this.style.color='var(--danger)'">🗑️ مسح الكل</button>
   </div>
@@ -673,9 +806,126 @@
     </table></div>
     <div id="summaryTotal" style="text-align:center;padding:0.75rem;font-weight:700;color:var(--gold);border-top:1px solid var(--border);font-size:0.9rem"></div>
   </div>
+  </div><!-- end tab-history -->
+
+  <!-- TAB: MONTHLY REPORT -->
+  <div class="tab-panel" id="tab-monthly">
+    <div class="month-controls">
+      <label>الشهر:</label>
+      <select id="monthSelect" onchange="renderMonthly()">
+        <option value="0">يناير</option><option value="1">فبراير</option>
+        <option value="2">مارس</option><option value="3">أبريل</option>
+        <option value="4">مايو</option><option value="5">يونيو</option>
+        <option value="6">يوليو</option><option value="7">أغسطس</option>
+        <option value="8">سبتمبر</option><option value="9">أكتوبر</option>
+        <option value="10">نوفمبر</option><option value="11">ديسمبر</option>
+      </select>
+      <label>السنة:</label>
+      <input type="number" id="yearSelect" value="2026" min="2024" max="2030" onchange="renderMonthly()" style="width:80px">
+    </div>
+
+    <!-- Stats cards -->
+    <div class="monthly-stats" id="monthlyStats"></div>
+
+    <!-- Daily breakdown table -->
+    <div class="section-title" style="font-size:1rem">📆 تفصيل الأيام</div>
+    <div class="history-section">
+      <div class="table-wrap">
+        <table class="monthly-table">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>عدد الجلسات</th>
+              <th>إجمالي الوقت</th>
+              <th>الإيرادات</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="monthlyDaysBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Per-game monthly breakdown -->
+    <div class="section-title" style="font-size:1rem;margin-top:1.5rem">🎯 تفصيل لكل لعبة</div>
+    <div class="game-monthly-grid" id="gameMonthlyGrid"></div>
+  </div><!-- end tab-monthly -->
+
 </main>
 
 <script>
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+const SUPA_URL = 'https://kntccloecbqkvbpmjmjt.supabase.co';
+const SUPA_KEY = 'sb_publishable_bSZ7yVF4gm1TN2fCc8Mrjg_wg_cja-8';
+
+async function supaFetch(path, method='GET', body=null) {
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'return=minimal' : ''
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const res = await fetch(SUPA_URL + '/rest/v1/' + path, opts);
+    if (!res.ok) { console.error('Supa error:', await res.text()); return null; }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) { console.error('Supa fetch failed:', e); return null; }
+}
+
+async function dbSaveBooking(unitId, b) {
+  // upsert: insert or replace
+  await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+  await supaFetch('bookings', 'POST', {
+    id: unitId,
+    unit_id: unitId,
+    unit_label: b.unitLabel || '',
+    name: b.name,
+    duration: b.duration,
+    mode: b.mode,
+    price: b.price,
+    start_time: b.startTime,
+    end_time: b.endTime
+  });
+}
+async function dbDeleteBooking(unitId) {
+  await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+}
+async function dbSaveHistoryEntry(h) {
+  await supaFetch('booking_history', 'POST', {
+    id: String(h.id),
+    unit_id: h.unitId || '',
+    game: h.game,
+    name: h.name,
+    duration: h.duration,
+    mode: h.mode,
+    price: h.price,
+    start_time: h.startTime,
+    end_time: h.endTime || null,
+    status: h.status
+  });
+}
+async function dbUpdateStatus(hId, status) {
+  await supaFetch('booking_history?id=eq.' + hId, 'PATCH', { status });
+}
+async function dbDeleteHistoryEntry(hId) {
+  await supaFetch('booking_history?id=eq.' + hId, 'DELETE');
+}
+async function dbClearAllHistory() {
+  await supaFetch('booking_history?id=neq.__none__', 'DELETE');
+}
+async function dbLoadAll() {
+  const [books, hist] = await Promise.all([
+    supaFetch('bookings?select=*'),
+    supaFetch('booking_history?select=*&order=start_time.desc&limit=100')
+  ]);
+  return { books: books||[], hist: hist||[] };
+}
+
 // ─── GAME DEFINITIONS ─────────────────────────────────────────────────────────
 // Each unit has: id, label, icon, cardClass, accentColor, type
 // type: 'multi'  -> has sub-units (PS4/PS3, tables, etc.)
@@ -685,22 +935,22 @@
 const UNITS = [
   // PlayStation PS4 x2 — فردي: ربع=8، نص=10، ساعة=20 | مالتي: +10ج/ربع
   { id:'ps4a', label:'PS4 - جهاز 1', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:8, 30:10, 60:20}, doubleExtra:10, hasModes:true },
+    basePrice:{15:8, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:30}, doubleExtra:0, hasModes:true },
   { id:'ps4b', label:'PS4 - جهاز 2', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:8, 30:10, 60:20}, doubleExtra:10, hasModes:true },
+    basePrice:{15:8, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:30}, doubleExtra:0, hasModes:true },
   // PlayStation PS3 x2 — فردي: ربع=5، نص=8، ساعة=15 | مالتي: +5ج/ربع
   { id:'ps3a', label:'PS3 - جهاز 1', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:5, 30:8, 60:15}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:8, 60:15}, doublePrice:{15:7, 30:10, 60:20}, doubleExtra:0, hasModes:true },
   { id:'ps3b', label:'PS3 - جهاز 2', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:5, 30:8, 60:15}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:8, 60:15}, doublePrice:{15:7, 30:10, 60:20}, doubleExtra:0, hasModes:true },
   // Ping Pong x2
   { id:'ping1', label:'بينج بونج - تربيزة 1', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
   { id:'ping2', label:'بينج بونج - تربيزة 2', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
   // Billiard x1
   { id:'billiard', label:'بلياردو', parent:'billiard', icon:'🎱', cardClass:'billiard-card', accentColor:'#1A6B3C',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:5, hasModes:true },
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
   // Air Hockey x2 (always 2 players facing each other = pair mode only)
   { id:'hockey1', label:'هوكي هواء - طاولة 1', parent:'hockey', icon:'🏒', cardClass:'hockey-card', accentColor:'#1A4A8B',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false },
@@ -731,20 +981,53 @@ let alarmCtx = null;
 
 // ─── PRICE CALC ───────────────────────────────────────────────────────────────
 function calcPrice(unit, dur, mode) {
-  let base;
-  if (unit.basePrice[dur] !== undefined) {
-    base = unit.basePrice[dur];
+  const isDouble = mode === 'double' || mode === 'pair';
+  const priceMap = isDouble && unit.doublePrice ? unit.doublePrice : unit.basePrice;
+
+  // لو المدة موجودة في الجدول، رجّعها مباشرة
+  if (priceMap[dur] !== undefined) return priceMap[dur];
+
+  // للمدد المخصصة: نقسّم لساعات كاملة + باقي
+  // نحسب سعر الساعة من priceMap[60]، والنص من priceMap[30]، والربع من priceMap[15]
+  const hourRate  = priceMap[60]  ?? (priceMap[30] ? priceMap[30] * 2 : priceMap[15] * 4);
+  const halfRate  = priceMap[30]  ?? Math.round(hourRate / 2);
+  const quartRate = priceMap[15]  ?? Math.round(hourRate / 4);
+
+  const fullHours = Math.floor(dur / 60);
+  const remainder = dur % 60; // الدقائق الزيادة بعد الساعات الكاملة
+
+  let total = fullHours * hourRate;
+
+  if (remainder === 0) {
+    // بالظبط ساعات كاملة
+  } else if (remainder <= 15) {
+    total += quartRate;
+  } else if (remainder <= 30) {
+    total += halfRate;
+  } else if (remainder <= 45) {
+    total += halfRate + quartRate;
   } else {
-    // للمدد غير المحددة: احسب نسبة من أعلى سعر موجود (الساعة)
-    const maxDur = Math.max(...Object.keys(unit.basePrice).map(Number));
-    const maxPrice = unit.basePrice[maxDur];
-    base = Math.round((dur / maxDur) * maxPrice);
+    total += hourRate; // أقرب ساعة
   }
-  if (mode === 'double' || mode === 'pair') {
+
+  // لو فردي وعنده doubleExtra (للألعاب التانية زي بينج)
+  if (isDouble && !unit.doublePrice && unit.doubleExtra) {
     const quarters = Math.ceil(dur / 15);
-    return base + (unit.doubleExtra * quarters);
+    const baseTotal = (() => {
+      const bp = unit.basePrice;
+      if (bp[dur] !== undefined) return bp[dur];
+      const fh = Math.floor(dur/60), rem = dur%60;
+      const hr = bp[60]??(bp[30]?bp[30]*2:bp[15]*4);
+      const hn = bp[30]??Math.round(hr/2);
+      const qr = bp[15]??Math.round(hr/4);
+      let t = fh*hr;
+      if(rem===0){}else if(rem<=15)t+=qr;else if(rem<=30)t+=hn;else if(rem<=45)t+=hn+qr;else t+=hr;
+      return t;
+    })();
+    return baseTotal + unit.doubleExtra * quarters;
   }
-  return base;
+
+  return total;
 }
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
@@ -845,7 +1128,9 @@ function showConfirm(msg, onYes) {
 
 // ─── LOCALSTORAGE ─────────────────────────────────────────────────────────────
 const LS_H = 'church_history_v2', LS_B = 'church_bookings_v2';
-function saveHistory() { try { localStorage.setItem(LS_H, JSON.stringify(history)); } catch(e){} }
+function saveHistory() {
+  try { localStorage.setItem(LS_H, JSON.stringify(history)); } catch(e){}
+}
 function saveBookings() {
   try {
     const s = {};
@@ -855,33 +1140,73 @@ function saveBookings() {
     localStorage.setItem(LS_B, JSON.stringify(s));
   } catch(e){}
 }
-function loadHistory() {
+function loadFromLocalStorage() {
+  // History
   try {
     const raw = localStorage.getItem(LS_H);
     if (raw) {
       history = JSON.parse(raw);
       history.forEach(h => {
-        // فقط غيّر لـ "منتهي" لو الوقت الفعلي خلص فعلاً
-        if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) {
-          h.status = 'completed';
-        }
+        if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) h.status = 'completed';
       });
-      saveHistory();
     }
   } catch(e){}
-}
-function loadBookings() {
+  // Bookings
   try {
     const raw = localStorage.getItem(LS_B);
     if (!raw) return;
     const saved = JSON.parse(raw);
     Object.entries(saved).forEach(([id,b]) => {
       if (b.endTime > Date.now()) {
-        const remOnLoad = b.endTime - Date.now(); warned[id] = remOnLoad <= 5 * 60000;
+        warned[id] = (b.endTime - Date.now()) <= 5*60000;
         bookings[id] = { ...b, intervalId: setInterval(() => tickBooking(id), 1000) };
       }
     });
   } catch(e){}
+}
+
+async function syncFromDB() {
+  try {
+    const { books, hist } = await dbLoadAll();
+
+    // -- History from DB --
+    if (hist.length > 0) {
+      history = hist.map(r => ({
+        id: r.id, unitId: r.unit_id, game: r.game, name: r.name,
+        duration: r.duration, mode: r.mode, price: r.price,
+        startTime: r.start_time, endTime: r.end_time, status: r.status
+      }));
+      // Fix any that ended while we were offline
+      history.forEach(h => {
+        if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) h.status = 'completed';
+      });
+      saveHistory();
+    }
+
+    // -- Active bookings from DB --
+    if (books.length > 0) {
+      // Stop existing local intervals first to avoid duplicates
+      Object.values(bookings).forEach(b => clearInterval(b.intervalId));
+      bookings = {};
+      books.forEach(r => {
+        if (r.end_time > Date.now()) {
+          warned[r.id] = (r.end_time - Date.now()) <= 5*60000;
+          bookings[r.id] = {
+            name: r.name, duration: r.duration, startTime: r.start_time,
+            endTime: r.end_time, price: r.price, mode: r.mode,
+            unitLabel: r.unit_label,
+            intervalId: setInterval(() => tickBooking(r.id), 1000)
+          };
+        } else {
+          // Expired but still in DB - clean up
+          dbDeleteBooking(r.id);
+        }
+      });
+      saveBookings();
+    }
+  } catch(e) {
+    console.warn('DB sync failed, using localStorage:', e);
+  }
 }
 
 // ─── TIMER HELPERS ────────────────────────────────────────────────────────────
@@ -1071,11 +1396,17 @@ function book(id) {
   const now = Date.now();
   const endTime = now + dur*60000;
   warned[id] = false;
-  bookings[id] = { name, duration:dur, startTime:now, endTime, price, mode, unitLabel:unit.label, intervalId:setInterval(()=>tickBooking(id),1000) };
+  const bObj = { name, duration:dur, startTime:now, endTime, price, mode, unitLabel:unit.label,
+                  intervalId:setInterval(()=>tickBooking(id),1000) };
+  bookings[id] = bObj;
   saveBookings();
+  dbSaveBooking(id, bObj); // async - fire & forget
+
   const modeLabel = mode==='double'?'زوجي':(mode==='pair'?'اتنين':'فردي');
-  history.unshift({ game:unit.label, name, duration:dur, price, startTime:now, endTime, status:'active', mode:modeLabel });
+  const hEntry = { id: id+'_'+now, unitId:id, game:unit.label, name, duration:dur, price, startTime:now, endTime, status:'active', mode:modeLabel };
+  history.unshift(hEntry);
   updateHistory();
+  dbSaveHistoryEntry(hEntry); // async - fire & forget
   showToast('🎮',`تم الحجز - ${unit.label}`,`${name} | ${dur} د | ${modeLabel} | ${price} ج`,'success');
   renderGames();
 }
@@ -1106,9 +1437,13 @@ function tickBooking(id) {
     // ابدأ الصوت الأول
     startAlarm(id);
     showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
-    const entry = history.find(h=>h.name===b.name&&h.status==='active'&&h.game===unit?.label);
-    if(entry) entry.status='completed';
+    const entry = history.find(h=>h.unitId===id&&h.status==='active');
+    if(entry) {
+      entry.status='completed';
+      dbUpdateStatus(entry.id, 'completed');
+    }
     delete bookings[id]; delete warned[id];
+    dbDeleteBooking(id);
     saveBookings(); updateHistory(); renderGames();
   }
 }
@@ -1117,10 +1452,14 @@ function endBooking(id) {
   const b = bookings[id]; if(!b) return;
   const unit = UNITS.find(u=>u.id===id);
   clearInterval(b.intervalId);
-  const entry = history.find(h=>h.name===b.name&&h.status==='active'&&h.game===unit?.label);
-  if(entry) entry.status='completed';
+  const entry = history.find(h=>h.unitId===id&&h.status==='active');
+  if(entry) {
+    entry.status='completed';
+    dbUpdateStatus(entry.id, 'completed');
+  }
   stopAlarm(id);
   delete bookings[id]; delete warned[id];
+  dbDeleteBooking(id);
   saveBookings(); updateHistory();
   showToast('✅',`تم الإنهاء`,`${unit?.label} — ${b.name}`,'success');
   renderGames();
@@ -1150,12 +1489,13 @@ function updateHistory() {
 }
 
 function deleteHistoryEntry(i) {
-  // لو الحجز نشط، أوقفه الأول
   const h = history[i];
-  if (h && h.status === 'active') {
+  if (!h) return;
+  if (h.status === 'active') {
     const unit = UNITS.find(u => u.label === h.game);
     if (unit && bookings[unit.id]) endBooking(unit.id);
   }
+  dbDeleteHistoryEntry(h.id);
   history.splice(i, 1);
   saveHistory();
   updateHistory();
@@ -1163,6 +1503,7 @@ function deleteHistoryEntry(i) {
 
 function clearHistory() {
   showConfirm('هل أنت متأكد من مسح جميع سجلات الحجوزات؟', ()=>{
+    dbClearAllHistory();
     history=[];
     saveHistory();
     updateHistory();
@@ -1209,10 +1550,176 @@ function updateDailySummary() {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-loadHistory();
-loadBookings();
+// Wake AudioContext on first interaction
+document.addEventListener('click', () => {
+  if (!alarmCtx) alarmCtx = new (window.AudioContext||window.webkitAudioContext)();
+  else if (alarmCtx.state === 'suspended') alarmCtx.resume();
+}, { passive: true });
+
+// Load local data immediately (fast), then sync from DB
+loadFromLocalStorage();
 renderGames();
 updateHistory();
+
+// Then pull fresh data from DB in background
+syncFromDB().then(() => {
+  renderGames();
+  updateHistory();
+});
+
+// Poll DB every 15 seconds to catch bookings made on other devices
+setInterval(async () => {
+  await syncFromDB();
+  renderGames();
+  updateHistory();
+}, 15000);
+
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['games','history','monthly'][i] === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'monthly') {
+    // Set current month/year as default
+    const now = new Date();
+    document.getElementById('monthSelect').value = now.getMonth();
+    document.getElementById('yearSelect').value = now.getFullYear();
+    renderMonthly();
+  }
+}
+
+// ─── MONTHLY REPORT ───────────────────────────────────────────────────────────
+const GAME_COLORS = {
+  'PS4 - جهاز 1':'#1a56db','PS4 - جهاز 2':'#1a56db',
+  'PS3 - جهاز 1':'#003791','PS3 - جهاز 2':'#003791',
+  'بينج بونج - تربيزة 1':'#E8380D','بينج بونج - تربيزة 2':'#E8380D',
+  'بلياردو':'#1A6B3C',
+  'هوكي هواء - طاولة 1':'#1A4A8B','هوكي هواء - طاولة 2':'#1A4A8B',
+  'بيبي فوت - طاولة 1':'#B8860B','بيبي فوت - طاولة 2':'#B8860B',
+};
+const GAME_ICONS = {
+  'PS4 - جهاز 1':'🎮','PS4 - جهاز 2':'🎮',
+  'PS3 - جهاز 1':'🕹️','PS3 - جهاز 2':'🕹️',
+  'بينج بونج - تربيزة 1':'🏓','بينج بونج - تربيزة 2':'🏓',
+  'بلياردو':'🎱',
+  'هوكي هواء - طاولة 1':'🏒','هوكي هواء - طاولة 2':'🏒',
+  'بيبي فوت - طاولة 1':'⚽','بيبي فوت - طاولة 2':'⚽',
+};
+const GAME_GROUPS = {
+  'PS4 - جهاز 1':'PS4','PS4 - جهاز 2':'PS4',
+  'PS3 - جهاز 1':'PS3','PS3 - جهاز 2':'PS3',
+  'بينج بونج - تربيزة 1':'بينج بونج','بينج بونج - تربيزة 2':'بينج بونج',
+  'بلياردو':'بلياردو',
+  'هوكي هواء - طاولة 1':'هوكي هواء','هوكي هواء - طاولة 2':'هوكي هواء',
+  'بيبي فوت - طاولة 1':'بيبي فوت','بيبي فوت - طاولة 2':'بيبي فوت',
+};
+
+function renderMonthly() {
+  const month = parseInt(document.getElementById('monthSelect').value);
+  const year  = parseInt(document.getElementById('yearSelect').value);
+  const today = new Date();
+  const todayStr = today.toDateString();
+
+  // Filter history for this month
+  const monthEntries = history.filter(h => {
+    const d = new Date(h.startTime);
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  // ── Stats cards ──
+  const totalSessions = monthEntries.length;
+  const totalMinutes  = monthEntries.reduce((a,h) => a + (h.duration||0), 0);
+  const totalRevenue  = monthEntries.reduce((a,h) => a + (h.price||0), 0);
+  const daysActive    = new Set(monthEntries.map(h => new Date(h.startTime).toDateString())).size;
+
+  document.getElementById('monthlyStats').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${totalRevenue}</div><div class="stat-lbl">إجمالي الإيرادات (ج)</div></div>
+    <div class="stat-card"><div class="stat-val">${totalMinutes}</div><div class="stat-lbl">إجمالي الدقائق</div></div>
+    <div class="stat-card"><div class="stat-val">${totalSessions}</div><div class="stat-lbl">عدد الجلسات</div></div>
+    <div class="stat-card"><div class="stat-val">${daysActive}</div><div class="stat-lbl">أيام نشطة</div></div>
+  `;
+
+  // ── Daily table ──
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const tbody = document.getElementById('monthlyDaysBody');
+  let rows = '';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const dateStr = date.toDateString();
+    const isFuture = date > today && dateStr !== todayStr;
+    const dayEntries = monthEntries.filter(h => new Date(h.startTime).toDateString() === dateStr);
+    const mins = dayEntries.reduce((a,h) => a+(h.duration||0), 0);
+    const rev  = dayEntries.reduce((a,h) => a+(h.price||0), 0);
+    const hasData = dayEntries.length > 0;
+    const isToday = dateStr === todayStr;
+
+    const dateLabel = date.toLocaleDateString('ar-EG', {weekday:'short', day:'numeric', month:'short'});
+
+    // Game chips for detail row
+    const gameMap = {};
+    dayEntries.forEach(h => {
+      const g = GAME_GROUPS[h.game] || h.game;
+      if (!gameMap[g]) gameMap[g] = { mins:0, rev:0, sessions:0 };
+      gameMap[g].mins += h.duration||0;
+      gameMap[g].rev  += h.price||0;
+      gameMap[g].sessions++;
+    });
+    const chips = Object.entries(gameMap).map(([g,v]) =>
+      `<span class="game-chip">${g} <strong>${v.rev}ج</strong> · ${v.mins}د</span>`
+    ).join('');
+
+    if (!isFuture) {
+      rows += `
+        <tr class="day-row ${hasData?'has-data':''} ${isToday?'today':''}" onclick="toggleDayDetail('day-${d}-${month}-${year}')">
+          <td>${dateLabel}${isToday?' 📍':''}</td>
+          <td>${hasData ? dayEntries.length : '—'}</td>
+          <td>${hasData ? mins+' د' : '—'}</td>
+          <td style="color:var(--gold);font-weight:${hasData?'700':'400'}">${hasData ? rev+' ج' : '—'}</td>
+          <td style="font-size:0.8rem;color:var(--text-muted)">${hasData?'▼':''}</td>
+        </tr>
+        <tr class="detail-row" id="day-${d}-${month}-${year}">
+          <td colspan="5">
+            ${hasData
+              ? `<div class="game-breakdown">${chips}</div>`
+              : '<span style="color:var(--text-muted)">لا توجد حجوزات</span>'}
+          </td>
+        </tr>`;
+    }
+  }
+  tbody.innerHTML = rows || '<tr><td colspan="5" class="empty-history">لا توجد بيانات لهذا الشهر</td></tr>';
+
+  // ── Per-game monthly breakdown ──
+  const gameGroups = {};
+  monthEntries.forEach(h => {
+    const g = GAME_GROUPS[h.game] || h.game;
+    if (!gameGroups[g]) gameGroups[g] = { mins:0, rev:0, sessions:0, color: GAME_COLORS[h.game]||'#888', icon: GAME_ICONS[h.game]||'🎮' };
+    gameGroups[g].mins     += h.duration||0;
+    gameGroups[g].rev      += h.price||0;
+    gameGroups[g].sessions++;
+  });
+
+  document.getElementById('gameMonthlyGrid').innerHTML = Object.entries(gameGroups).length
+    ? Object.entries(gameGroups).map(([name, g]) => `
+        <div class="game-monthly-card">
+          <div class="gmc-header" style="background:${g.color}">${g.icon} ${name}</div>
+          <div class="gmc-body">
+            <div class="gmc-stat"><div class="gv">${g.rev}</div><div class="gl">جنيه</div></div>
+            <div class="gmc-stat"><div class="gv">${g.mins}</div><div class="gl">دقيقة</div></div>
+            <div class="gmc-stat"><div class="gv">${g.sessions}</div><div class="gl">جلسة</div></div>
+          </div>
+        </div>`).join('')
+    : '<p style="color:var(--text-muted);font-size:0.85rem;padding:1rem">لا توجد بيانات لهذا الشهر</p>';
+}
+
+function toggleDayDetail(id) {
+  const row = document.getElementById(id);
+  if (row) row.classList.toggle('open');
+}
+
 </script>
 </body>
 </html>
