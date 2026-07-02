@@ -808,11 +808,11 @@
   <p>نظام إدارة الألعاب والحجوزات</p>
 
   <div class="pin-box">
-    <label>كود الدخول</label>
+    <label>كود الدخول (للموظفين)</label>
     <input class="pin-input" id="pinInput" type="password" placeholder="● ● ● ● ● ●"
       maxlength="20" onkeydown="if(event.key==='Enter') checkPin()">
     <div class="pin-error" id="pinError"></div>
-    <button class="btn-pin-enter" onclick="checkPin()">🔐 دخول </button>
+    <button class="btn-pin-enter" onclick="checkPin()">🔐 دخول كموظف</button>
     <button class="btn-view-only" onclick="enterViewOnly()">👁️ متابعة فقط (بدون تعديل)</button>
   </div>
 </div>
@@ -1289,7 +1289,8 @@ async function syncFromDB() {
       history = hist.map(r => ({
         id: r.id, unitId: r.unit_id, game: r.game, name: r.name,
         duration: r.duration, mode: r.mode, price: r.price,
-        startTime: r.start_time, endTime: r.end_time, status: r.status
+        startTime: r.start_time, endTime: r.end_time, status: r.status,
+        hiddenFromLog: r.hidden_from_log || false
       }));
       // Fix any that ended while we were offline
       history.forEach(h => {
@@ -1583,10 +1584,11 @@ function endBooking(id) {
 // ─── HISTORY ──────────────────────────────────────────────────────────────────
 function updateHistory() {
   const tbody = document.getElementById('historyBody');
-  if(!history.length) {
+  const visibleHistory = history.filter(h => !h.hiddenFromLog);
+  if(!visibleHistory.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-history">لا توجد حجوزات بعد</td></tr>';
   } else {
-    tbody.innerHTML = history.slice(0,50).map((h,i)=>`
+    tbody.innerHTML = visibleHistory.slice(0,50).map((h,i)=>`
       <tr>
         <td data-label="اللعبة">${h.game}</td>
         <td data-label="الاسم">${h.name}</td>
@@ -1596,7 +1598,7 @@ function updateHistory() {
         <td data-label="البداية">${formatTime(h.startTime)}</td>
         <td data-label="النهاية">${h.endTime?formatTime(h.endTime):'—'}</td>
         <td data-label="الحالة"><span class="badge ${h.status==='active'?'badge-active':'badge-completed'}">${h.status==='active'?'نشط':'منتهي'}</span></td>
-        <td><button onclick="deleteHistoryEntry(${i})" class="del-btn" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--danger);padding:0.2rem 0.4rem" title="حذف">🗑️</button></td>
+        <td><button onclick="deleteHistoryEntry(history.indexOf(h))" class="del-btn" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--danger);padding:0.2rem 0.4rem" title="حذف">🗑️</button></td>
       </tr>`).join('');
   }
   saveHistory();
@@ -1606,23 +1608,27 @@ function updateHistory() {
 function deleteHistoryEntry(i) {
   const h = history[i];
   if (!h) return;
-  if (h.status === 'active') {
-    const unit = UNITS.find(u => u.label === h.game);
-    if (unit && bookings[unit.id]) endBooking(unit.id);
-  }
-  dbDeleteHistoryEntry(h.id);
-  history.splice(i, 1);
-  saveHistory();
-  updateHistory();
+  showConfirm('مسح هذا الحجز نهائياً من السجل والتقرير الشهري؟', () => {
+    if (h.status === 'active') {
+      const unit = UNITS.find(u => u.label === h.game);
+      if (unit && bookings[unit.id]) endBooking(unit.id);
+    }
+    dbDeleteHistoryEntry(h.id); // بيمسح من DB نهائياً
+    history.splice(i, 1);
+    saveHistory();
+    updateHistory();
+    showToast('🗑️','تم الحذف','تم حذف الحجز نهائياً من السجل والتقرير','info');
+  });
 }
 
 function clearHistory() {
-  showConfirm('هل أنت متأكد من مسح جميع سجلات الحجوزات؟', ()=>{
-    dbClearAllHistory();
-    history=[];
+  showConfirm('مسح سجل اليوم؟ البيانات هتفضل محفوظة في التقرير الشهري.', () => {
+    const todayStr = new Date().toDateString();
+    // بنمسح من العرض المحلي بس — الـ DB بيفضل محفوظ للتقرير الشهري
+    history = history.filter(h => new Date(h.startTime).toDateString() !== todayStr);
     saveHistory();
     updateHistory();
-    showToast('🗑️','تم المسح','تم مسح جميع الحجوزات','info');
+    showToast('🗑️', 'تم مسح سجل اليوم', 'البيانات محفوظة في التقرير الشهري', 'info');
   });
 }
 
@@ -1664,6 +1670,43 @@ function updateDailySummary() {
     `إجمالي اليوم: ${totalRev} جنيه  |  إجمالي الوقت: ${totalMin} د`;
 }
 
+
+
+// ─── AUTO CLEAR AT MIDNIGHT ───────────────────────────────────────────────────
+const LS_LAST_CLEAR = 'church_last_clear_v1';
+
+function autoMidnightClear() {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const lastClear = localStorage.getItem(LS_LAST_CLEAR);
+
+  // لو اليوم مختلف عن آخر مسح، امسح سجل الأمس تلقائياً
+  if (lastClear && lastClear !== todayStr) {
+    const yesterday = new Date(lastClear);
+    const yesterdayStr = yesterday.toDateString();
+    // امسح من الـ history المحلي بس الأيام اللي فاتت (مش النهارده)
+    history = history.filter(h => new Date(h.startTime).toDateString() === todayStr);
+    saveHistory();
+    updateHistory();
+    console.log('تم المسح التلقائي لسجل:', yesterdayStr);
+  }
+  localStorage.setItem(LS_LAST_CLEAR, todayStr);
+}
+
+function scheduleMidnightClear() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 500); // 12:00:00 صباحاً الغد
+  const msUntilMidnight = midnight - now;
+
+  setTimeout(() => {
+    autoMidnightClear();
+    // بعد ما يعمل المسح، اجدول المسح التاني للمنتص الليل الجاي
+    setInterval(autoMidnightClear, 24 * 60 * 60 * 1000);
+  }, msUntilMidnight);
+
+  console.log(`المسح التلقائي هيتم بعد: ${Math.round(msUntilMidnight/60000)} دقيقة`);
+}
 
 // ─── PIN AUTH ─────────────────────────────────────────────────────────────────
 const CORRECT_PIN = 'MFK-2026';
@@ -1710,9 +1753,36 @@ function checkSavedAuth() {
   setTimeout(() => document.getElementById('pinInput')?.focus(), 300);
 }
 
+
+// ─── AUTO CLEAR AT MIDNIGHT ───────────────────────────────────────────────────
+function scheduleAutoClear() {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 5, 0); // 12:00:05 AM
+  const msUntilMidnight = midnight - now;
+
+  setTimeout(() => {
+    // مسح سجل اليوم السابق من العرض بس — الـ DB بيفضل للتقرير الشهري
+    const todayStr = new Date().toDateString();
+    history = history.filter(h => new Date(h.startTime).toDateString() === todayStr);
+    saveHistory();
+    updateHistory();
+    showToast('🕛', 'مسح تلقائي', 'تم مسح سجل أمس تلقائياً — التقرير الشهري محفوظ', 'info');
+    // جدول مرة تانية للمدة الجاية
+    scheduleAutoClear();
+  }, msUntilMidnight);
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 // Check auth on load
 checkSavedAuth();
+
+// Schedule auto-clear at midnight
+scheduleAutoClear();
+
+// تحقق من المسح التلقائي عند الفتح + جدول المسح المنتصف الليل
+autoMidnightClear();
+scheduleMidnightClear();
 
 // Wake AudioContext on first interaction
 document.addEventListener('click', () => {
@@ -1781,14 +1851,27 @@ const GAME_GROUPS = {
   'بيبي فوت - طاولة 1':'بيبي فوت','بيبي فوت - طاولة 2':'بيبي فوت',
 };
 
-function renderMonthly() {
+async function renderMonthly() {
   const month = parseInt(document.getElementById('monthSelect').value);
   const year  = parseInt(document.getElementById('yearSelect').value);
   const today = new Date();
   const todayStr = today.toDateString();
 
+  // Load directly from DB for accurate monthly data (bypasses local clearing)
+  let allHistory = history;
+  try {
+    const dbHist = await supaFetch('booking_history?select=*&order=start_time.desc&limit=500');
+    if (dbHist && dbHist.length > 0) {
+      allHistory = dbHist.map(r => ({
+        id: r.id, game: r.game, name: r.name, duration: r.duration,
+        mode: r.mode, price: r.price, startTime: r.start_time,
+        endTime: r.end_time, status: r.status
+      }));
+    }
+  } catch(e) { /* fallback to local */ }
+
   // Filter history for this month
-  const monthEntries = history.filter(h => {
+  const monthEntries = allHistory.filter(h => {
     const d = new Date(h.startTime);
     return d.getMonth() === month && d.getFullYear() === year;
   });
