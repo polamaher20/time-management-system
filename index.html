@@ -972,6 +972,10 @@
 const SUPA_URL = 'https://kntccloecbqkvbpmjmjt.supabase.co';
 const SUPA_KEY = 'sb_publishable_bSZ7yVF4gm1TN2fCc8Mrjg_wg_cja-8';
 
+// عداد العمليات الجارية على قاعدة البيانات — بيمنع الـ sync الدوري من إنه يمسح
+// أي حجز/سجل لسه بيتكتب في الـ DB (ده كان سبب إن الحجز يقفل لوحده ويتكرر في السجل)
+let pendingWrites = 0;
+
 async function supaFetch(path, method='GET', body=null) {
   const opts = {
     method,
@@ -992,45 +996,73 @@ async function supaFetch(path, method='GET', body=null) {
 }
 
 async function dbSaveBooking(unitId, b) {
-  // upsert: insert or replace
-  await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
-  await supaFetch('bookings', 'POST', {
-    id: unitId,
-    unit_id: unitId,
-    unit_label: b.unitLabel || '',
-    name: b.name,
-    duration: b.duration,
-    mode: b.mode,
-    price: b.price,
-    start_time: b.startTime,
-    end_time: b.endTime
-  });
+  pendingWrites++;
+  try {
+    // upsert: insert or replace
+    await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+    await supaFetch('bookings', 'POST', {
+      id: unitId,
+      unit_id: unitId,
+      unit_label: b.unitLabel || '',
+      name: b.name,
+      duration: b.duration,
+      mode: b.mode,
+      price: b.price,
+      start_time: b.startTime,
+      end_time: b.endTime
+    });
+  } finally { pendingWrites--; }
 }
 async function dbDeleteBooking(unitId) {
-  await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+  pendingWrites++;
+  try {
+    await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+  } finally { pendingWrites--; }
 }
 async function dbSaveHistoryEntry(h) {
-  await supaFetch('booking_history', 'POST', {
-    id: String(h.id),
-    unit_id: h.unitId || '',
-    game: h.game,
-    name: h.name,
-    duration: h.duration,
-    mode: h.mode,
-    price: h.price,
-    start_time: h.startTime,
-    end_time: h.endTime || null,
-    status: h.status
-  });
+  pendingWrites++;
+  try {
+    await supaFetch('booking_history', 'POST', {
+      id: String(h.id),
+      unit_id: h.unitId || '',
+      game: h.game,
+      name: h.name,
+      duration: h.duration,
+      mode: h.mode,
+      price: h.price,
+      start_time: h.startTime,
+      end_time: h.endTime || null,
+      status: h.status
+    });
+  } finally { pendingWrites--; }
 }
 async function dbUpdateStatus(hId, status) {
-  await supaFetch('booking_history?id=eq.' + hId, 'PATCH', { status });
+  pendingWrites++;
+  try {
+    await supaFetch('booking_history?id=eq.' + hId, 'PATCH', { status });
+  } finally { pendingWrites--; }
 }
 async function dbDeleteHistoryEntry(hId) {
-  await supaFetch('booking_history?id=eq.' + hId, 'DELETE');
+  pendingWrites++;
+  try {
+    await supaFetch('booking_history?id=eq.' + hId, 'DELETE');
+  } finally { pendingWrites--; }
 }
 async function dbClearAllHistory() {
-  await supaFetch('booking_history?id=neq.__none__', 'DELETE');
+  pendingWrites++;
+  try {
+    await supaFetch('booking_history?id=neq.__none__', 'DELETE');
+  } finally { pendingWrites--; }
+}
+async function dbHideTodayHistory(ids) {
+  if (!ids || !ids.length) return;
+  pendingWrites++;
+  try {
+    // بنحدّث كل صف بيه بالـ id بتاعه (PATCH بيه فلتر IN عن طريق or=())
+    const filter = 'or=(' + ids.map(id => `id.eq.${id}`).join(',') + ')';
+    await supaFetch('booking_history?' + filter, 'PATCH', { hidden_from_log: true });
+  } catch(e) { console.error('dbHideTodayHistory failed:', e); }
+  finally { pendingWrites--; }
 }
 async function dbLoadAll() {
   const [books, hist] = await Promise.all([
@@ -1242,6 +1274,26 @@ function showConfirm(msg, onYes) {
 
 // ─── LOCALSTORAGE ─────────────────────────────────────────────────────────────
 const LS_H = 'church_history_v2', LS_B = 'church_bookings_v2';
+// قايمة الـ IDs اللي اتمسحت يدوياً أو تلقائياً — بتتحفظ في الجهاز ده نفسه بشكل دائم
+// عشان حتى لو تحديث قاعدة البيانات فشل أو الـ sync رجّع البيانات، تفضل الصفوف دي مخفية
+const LS_CLEARED_IDS = 'church_cleared_ids_v1';
+function getClearedIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_CLEARED_IDS) || '[]')); }
+  catch(e) { return new Set(); }
+}
+function addClearedIds(ids) {
+  if (!ids || !ids.length) return;
+  const s = getClearedIds();
+  ids.forEach(id => s.add(String(id)));
+  // نحافظ على آخر 3000 id بس عشان الحجم ميكبرش بلا نهاية
+  const arr = [...s].slice(-3000);
+  try { localStorage.setItem(LS_CLEARED_IDS, JSON.stringify(arr)); } catch(e) {}
+}
+function applyClearedIds() {
+  const cleared = getClearedIds();
+  if (!cleared.size) return;
+  history.forEach(h => { if (cleared.has(String(h.id))) h.hiddenFromLog = true; });
+}
 function saveHistory() {
   try { localStorage.setItem(LS_H, JSON.stringify(history)); } catch(e){}
 }
@@ -1263,6 +1315,7 @@ function loadFromLocalStorage() {
       history.forEach(h => {
         if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) h.status = 'completed';
       });
+      applyClearedIds();
     }
   } catch(e){}
   // Bookings
@@ -1280,8 +1333,13 @@ function loadFromLocalStorage() {
 }
 
 async function syncFromDB() {
+  // لو في عملية كتابة (حجز جديد / حذف / تحديث) لسه شغالة، منعملش sync دلوقتي
+  // عشان منمسحش الحجز أو السجل اللي لسه بيتحفظ (ده كان سبب إن الحجز يقفل لوحده)
+  if (pendingWrites > 0) return;
   try {
     const { books, hist } = await dbLoadAll();
+    // اتأكد إن مفيش كتابة بدأت أثناء ما إحنا بنجيب البيانات (race condition)
+    if (pendingWrites > 0) return;
 
     // -- History from DB --
     if (hist.length > 0) {
@@ -1295,6 +1353,9 @@ async function syncFromDB() {
       history.forEach(h => {
         if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) h.status = 'completed';
       });
+      // بنطبّق قايمة "الممسوح من الجهاز ده" فوق أي بيانات جاية من الـ DB —
+      // كده أي صف اتمسح قبل كده هيفضل مخفي مهما حصل مع الـ sync
+      applyClearedIds();
       saveHistory();
     }
 
@@ -1597,14 +1658,15 @@ function updateHistory() {
         <td data-label="البداية">${formatTime(h.startTime)}</td>
         <td data-label="النهاية">${h.endTime?formatTime(h.endTime):'—'}</td>
         <td data-label="الحالة"><span class="badge ${h.status==='active'?'badge-active':'badge-completed'}">${h.status==='active'?'نشط':'منتهي'}</span></td>
-        <td><button onclick="deleteHistoryEntry(history.indexOf(h))" class="del-btn" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--danger);padding:0.2rem 0.4rem" title="حذف">🗑️</button></td>
+        <td><button onclick="deleteHistoryEntry('${String(h.id).replace(/'/g,"\\'")}')" class="del-btn" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--danger);padding:0.2rem 0.4rem" title="حذف">🗑️</button></td>
       </tr>`).join('');
   }
   saveHistory();
   updateDailySummary();
 }
 
-function deleteHistoryEntry(i) {
+function deleteHistoryEntry(id) {
+  const i = history.findIndex(x => String(x.id) === String(id));
   const h = history[i];
   if (!h) return;
   showConfirm('مسح هذا الحجز نهائياً من السجل والتقرير الشهري؟', () => {
@@ -1623,10 +1685,20 @@ function deleteHistoryEntry(i) {
 function clearHistory() {
   showConfirm('مسح سجل اليوم؟ البيانات هتفضل محفوظة في التقرير الشهري.', () => {
     const todayStr = new Date().toDateString();
-    // بنمسح من العرض المحلي بس — الـ DB بيفضل محفوظ للتقرير الشهري
-    history = history.filter(h => new Date(h.startTime).toDateString() !== todayStr);
+    // بنعلّم سجلات النهاردة كـ "مخفية من العرض" بدل ما نمسحها من الذاكرة بس —
+    // كده بتفضل مخفية حتى لو الـ sync الدوري جاب البيانات تاني من الـ DB
+    // (المشكلة اللي كانت بتخلي السجل يرجع تاني بعد الحذف)
+    const idsToHide = [];
+    history.forEach(h => {
+      if (new Date(h.startTime).toDateString() === todayStr) {
+        h.hiddenFromLog = true;
+        idsToHide.push(h.id);
+      }
+    });
+    addClearedIds(idsToHide); // حفظ دائم في الجهاز — الأولوية الأساسية
     saveHistory();
     updateHistory();
+    dbHideTodayHistory(idsToHide); // محاولة إضافية لتحديث الـ DB لباقي الأجهزة (لو العمود موجود)
     showToast('🗑️', 'تم مسح سجل اليوم', 'البيانات محفوظة في التقرير الشهري', 'info');
   });
 }
@@ -1652,6 +1724,7 @@ function updateDailySummary() {
     'بيبي فوت - طاولة 1':'babyfoot','بيبي فوت - طاولة 2':'babyfoot',
   };
   history.forEach(h=>{
+    if(h.hiddenFromLog) return;
     if(new Date(h.startTime).toDateString()!==todayStr) return;
     const cat = labelMap[h.game];
     if(cat && cats[cat]) { cats[cat].minutes+=h.duration||0; cats[cat].revenue+=h.price||0; cats[cat].sessions+=1; }
@@ -1679,32 +1752,32 @@ function autoMidnightClear() {
   const todayStr = now.toDateString();
   const lastClear = localStorage.getItem(LS_LAST_CLEAR);
 
-  // لو اليوم مختلف عن آخر مسح، امسح سجل الأمس تلقائياً
+  // لو اليوم مختلف عن آخر مسح، اخفي سجل الأمس تلقائياً من العرض
   if (lastClear && lastClear !== todayStr) {
-    const yesterday = new Date(lastClear);
-    const yesterdayStr = yesterday.toDateString();
-    // امسح من الـ history المحلي بس الأيام اللي فاتت (مش النهارده)
-    history = history.filter(h => new Date(h.startTime).toDateString() === todayStr);
+    const yesterdayStr = new Date(lastClear).toDateString();
+    // بنعلّم سجلات الأيام اللي فاتت كـ "مخفية" (مش بنمسحها من الذاكرة بس)
+    // عشان الـ sync الدوري ميرجعهاش تاني من الـ DB
+    const idsToHide = [];
+    history.forEach(h => {
+      if (new Date(h.startTime).toDateString() !== todayStr && !h.hiddenFromLog) {
+        h.hiddenFromLog = true;
+        idsToHide.push(h.id);
+      }
+    });
+    addClearedIds(idsToHide); // حفظ دائم في الجهاز
     saveHistory();
     updateHistory();
+    dbHideTodayHistory(idsToHide);
     console.log('تم المسح التلقائي لسجل:', yesterdayStr);
   }
   localStorage.setItem(LS_LAST_CLEAR, todayStr);
 }
 
 function scheduleMidnightClear() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 500); // 12:00:00 صباحاً الغد
-  const msUntilMidnight = midnight - now;
-
-  setTimeout(() => {
-    autoMidnightClear();
-    // بعد ما يعمل المسح، اجدول المسح التاني للمنتص الليل الجاي
-    setInterval(autoMidnightClear, 24 * 60 * 60 * 1000);
-  }, msUntilMidnight);
-
-  console.log(`المسح التلقائي هيتم بعد: ${Math.round(msUntilMidnight/60000)} دقيقة`);
+  // بنتأكد كل 30 ثانية لو اليوم اتغير، بدل ما نعتمد على setTimeout واحد لبكرة
+  // (المتصفح ممكن يبطّئ الـ setTimeout الطويل لو الصفحة مصغّرة/في الخلفية،
+  // فده كان ممكن يخلي المسح التلقائي يتأخر أو ميحصلش)
+  setInterval(autoMidnightClear, 30 * 1000);
 }
 
 // ─── PIN AUTH ─────────────────────────────────────────────────────────────────
@@ -1753,33 +1826,11 @@ function checkSavedAuth() {
 }
 
 
-// ─── AUTO CLEAR AT MIDNIGHT ───────────────────────────────────────────────────
-function scheduleAutoClear() {
-  const now = new Date();
-  const midnight = new Date();
-  midnight.setHours(24, 0, 5, 0); // 12:00:05 AM
-  const msUntilMidnight = midnight - now;
-
-  setTimeout(() => {
-    // مسح سجل اليوم السابق من العرض بس — الـ DB بيفضل للتقرير الشهري
-    const todayStr = new Date().toDateString();
-    history = history.filter(h => new Date(h.startTime).toDateString() === todayStr);
-    saveHistory();
-    updateHistory();
-    showToast('🕛', 'مسح تلقائي', 'تم مسح سجل أمس تلقائياً — التقرير الشهري محفوظ', 'info');
-    // جدول مرة تانية للمدة الجاية
-    scheduleAutoClear();
-  }, msUntilMidnight);
-}
-
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 // Check auth on load
 checkSavedAuth();
 
-// Schedule auto-clear at midnight
-scheduleAutoClear();
-
-// تحقق من المسح التلقائي عند الفتح + جدول المسح المنتصف الليل
+// تحقق من المسح التلقائي عند الفتح + جدول المسح التلقائي عند منتصف الليل
 autoMidnightClear();
 scheduleMidnightClear();
 
