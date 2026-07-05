@@ -807,12 +807,12 @@
   <p>نظام إدارة الألعاب والحجوزات</p>
 
   <div class="pin-box">
-    <label>كود الدخول (للموظفين)</label>
+    <label>كود الدخول</label>
     <input class="pin-input" id="pinInput" type="password" placeholder="● ● ● ● ● ●"
       maxlength="20" onkeydown="if(event.key==='Enter') checkPin()">
     <div class="pin-error" id="pinError"></div>
-    <button class="btn-pin-enter" onclick="checkPin()">🔐 دخول كموظف</button>
-    <button class="btn-view-only" onclick="enterViewOnly()">👁️ متابعة فقط (بدون تعديل)</button>
+    <button class="btn-pin-enter" onclick="checkPin()">🔐 دخول</button>
+    <button class="btn-view-only" onclick="enterViewOnly()">👁️ متابعة فقط</button>
   </div>
 </div>
 
@@ -1081,14 +1081,14 @@ async function dbLoadAll() {
 const UNITS = [
   // PlayStation PS4 x2 — فردي: ربع=8، نص=10، ساعة=20 | مالتي: +10ج/ربع
   { id:'ps4a', label:'PS4 - جهاز 1', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:8, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:30}, doubleExtra:0, hasModes:true },
+    basePrice:{15:10, 30:15, 60:20}, doublePrice:{15:15, 30:20, 60:30}, doubleExtra:0, hasModes:true },
   { id:'ps4b', label:'PS4 - جهاز 2', parent:'ps', icon:'🎮', cardClass:'ps4-card', accentColor:'#1a56db',
-    basePrice:{15:8, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:30}, doubleExtra:0, hasModes:true },
+    basePrice:{15:10, 30:15, 60:20}, doublePrice:{15:15, 30:20, 60:30}, doubleExtra:0, hasModes:true },
   // PlayStation PS3 x2 — فردي: ربع=5، نص=8، ساعة=15 | مالتي: +5ج/ربع
   { id:'ps3a', label:'PS3 - جهاز 1', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:5, 30:8, 60:15}, doublePrice:{15:7, 30:10, 60:20}, doubleExtra:0, hasModes:true },
+    basePrice:{15:5, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:25}, doubleExtra:0, hasModes:true },
   { id:'ps3b', label:'PS3 - جهاز 2', parent:'ps', icon:'🕹️', cardClass:'ps3-card', accentColor:'#003791',
-    basePrice:{15:5, 30:8, 60:15}, doublePrice:{15:7, 30:10, 60:20}, doubleExtra:0, hasModes:true },
+    basePrice:{15:5, 30:10, 60:20}, doublePrice:{15:10, 30:15, 60:25}, doubleExtra:0, hasModes:true },
   // Ping Pong x2
   { id:'ping1', label:'بينج بونج - تربيزة 1', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
