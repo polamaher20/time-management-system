@@ -1122,6 +1122,7 @@ let history  = [];
 let gameState = {};  // unitId -> { dur, mode }
 let isDark = false;
 let warned = {};
+const recentlyEnded = new Set(); // حجوزات انتهت مؤخراً — الـ sync ميرجعهاش
 let activeAlarms = {};
 let alarmCtx = null;
 
@@ -1276,24 +1277,11 @@ function showConfirm(msg, onYes) {
 const LS_H = 'church_history_v2', LS_B = 'church_bookings_v2';
 // قايمة الـ IDs اللي اتمسحت يدوياً أو تلقائياً — بتتحفظ في الجهاز ده نفسه بشكل دائم
 // عشان حتى لو تحديث قاعدة البيانات فشل أو الـ sync رجّع البيانات، تفضل الصفوف دي مخفية
-const LS_CLEARED_IDS = 'church_cleared_ids_v1';
-function getClearedIds() {
-  try { return new Set(JSON.parse(localStorage.getItem(LS_CLEARED_IDS) || '[]')); }
-  catch(e) { return new Set(); }
-}
-function addClearedIds(ids) {
-  if (!ids || !ids.length) return;
-  const s = getClearedIds();
-  ids.forEach(id => s.add(String(id)));
-  // نحافظ على آخر 3000 id بس عشان الحجم ميكبرش بلا نهاية
-  const arr = [...s].slice(-3000);
-  try { localStorage.setItem(LS_CLEARED_IDS, JSON.stringify(arr)); } catch(e) {}
-}
-function applyClearedIds() {
-  const cleared = getClearedIds();
-  if (!cleared.size) return;
-  history.forEach(h => { if (cleared.has(String(h.id))) h.hiddenFromLog = true; });
-}
+const LS_CLEARED_TS = 'church_cleared_ts_v2';
+function getClearedTs()  { return parseInt(localStorage.getItem(LS_CLEARED_TS) || '0'); }
+function markClearedNow() { localStorage.setItem(LS_CLEARED_TS, String(Date.now())); }
+// لم تعد مستخدمة لكن نحتفظ بها لتجنب أخطاء الـ runtime
+function applyClearedIds() {}
 function saveHistory() {
   try { localStorage.setItem(LS_H, JSON.stringify(history)); } catch(e){}
 }
@@ -1343,43 +1331,53 @@ async function syncFromDB() {
 
     // -- History from DB --
     if (hist.length > 0) {
-      history = hist.map(r => ({
+      const dbIds = new Set(hist.map(r => String(r.id)));
+      const localOnly = history.filter(h => !dbIds.has(String(h.id)));
+      const fromDB = hist.map(r => ({
         id: r.id, unitId: r.unit_id, game: r.game, name: r.name,
         duration: r.duration, mode: r.mode, price: r.price,
-        startTime: r.start_time, endTime: r.end_time, status: r.status,
-        hiddenFromLog: r.hidden_from_log || false
+        startTime: Number(r.start_time), endTime: Number(r.end_time), status: r.status
       }));
-      // Fix any that ended while we were offline
-      history.forEach(h => {
+      fromDB.forEach(h => {
         if (h.status === 'active' && h.endTime && h.endTime <= Date.now()) h.status = 'completed';
       });
-      // بنطبّق قايمة "الممسوح من الجهاز ده" فوق أي بيانات جاية من الـ DB —
-      // كده أي صف اتمسح قبل كده هيفضل مخفي مهما حصل مع الـ sync
-      applyClearedIds();
+      history = [...localOnly, ...fromDB].sort((a,b) => b.startTime - a.startTime);
       saveHistory();
+      updateHistory(); // ← ضروري عشان الـ DOM يتحدث بعد الـ sync
     }
 
-    // -- Active bookings from DB --
-    if (books.length > 0) {
-      // Stop existing local intervals first to avoid duplicates
-      Object.values(bookings).forEach(b => clearInterval(b.intervalId));
-      bookings = {};
-      books.forEach(r => {
-        if (r.end_time > Date.now()) {
-          warned[r.id] = (r.end_time - Date.now()) <= 5*60000;
-          bookings[r.id] = {
-            name: r.name, duration: r.duration, startTime: r.start_time,
-            endTime: r.end_time, price: r.price, mode: r.mode,
-            unitLabel: r.unit_label,
-            intervalId: setInterval(() => tickBooking(r.id), 1000)
-          };
-        } else {
-          // Expired but still in DB - clean up
-          dbDeleteBooking(r.id);
+    // -- Active bookings from DB (smart merge — مش بيمسح intervals شغالة) --
+    const dbBookingIds = new Set(books.map(r => String(r.id)));
+    const now = Date.now();
+
+    // شيل الحجوزات المحلية اللي مش موجودة في DB بعد grace period 30 ثانية
+    Object.keys(bookings).forEach(localId => {
+      if (!dbBookingIds.has(localId)) {
+        const b = bookings[localId];
+        if ((now - Number(b.startTime || 0)) > 30000) {
+          clearInterval(b.intervalId);
+          delete bookings[localId];
         }
-      });
-      saveBookings();
-    }
+      }
+    });
+
+    // أضف أو حدّث الحجوزات الجاية من DB
+    books.forEach(r => {
+      if (recentlyEnded.has(r.id)) return;
+      const endTime = Number(r.end_time);
+      const startTime = Number(r.start_time);
+      if (endTime <= now) { dbDeleteBooking(r.id); return; }
+      const existing = bookings[r.id];
+      if (existing && Number(existing.endTime) === endTime) return; // نفس الحجز شغال ← متلمسوش
+      if (existing) clearInterval(existing.intervalId);
+      warned[r.id] = (endTime - now) <= 5 * 60000;
+      bookings[r.id] = {
+        name: r.name, duration: r.duration, startTime, endTime,
+        price: r.price, mode: r.mode, unitLabel: r.unit_label,
+        intervalId: setInterval(() => tickBooking(r.id), 1000)
+      };
+    });
+    saveBookings();
   } catch(e) {
     console.warn('DB sync failed, using localStorage:', e);
   }
@@ -1608,9 +1606,9 @@ function tickBooking(id) {
   }
   if(rem<=0) {
     const unit = UNITS.find(u=>u.id===id);
-    // أوقف الـ interval الأول عشان منعيدش ندخل هنا
     clearInterval(b.intervalId);
-    // ابدأ الصوت الأول
+    recentlyEnded.add(id);
+    setTimeout(() => recentlyEnded.delete(id), 20000);
     startAlarm(id);
     showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
     const entry = history.find(h=>h.unitId===id&&h.status==='active');
@@ -1628,6 +1626,8 @@ function endBooking(id) {
   const b = bookings[id]; if(!b) return;
   const unit = UNITS.find(u=>u.id===id);
   clearInterval(b.intervalId);
+  recentlyEnded.add(id);
+  setTimeout(() => recentlyEnded.delete(id), 20000);
   const entry = history.find(h=>h.unitId===id&&h.status==='active');
   if(entry) {
     entry.status='completed';
@@ -1644,7 +1644,8 @@ function endBooking(id) {
 // ─── HISTORY ──────────────────────────────────────────────────────────────────
 function updateHistory() {
   const tbody = document.getElementById('historyBody');
-  const visibleHistory = history.filter(h => !h.hiddenFromLog);
+  const clearedTs = getClearedTs();
+  const visibleHistory = history.filter(h => Number(h.startTime) > clearedTs);
   if(!visibleHistory.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-history">لا توجد حجوزات بعد</td></tr>';
   } else {
@@ -1683,23 +1684,10 @@ function deleteHistoryEntry(id) {
 }
 
 function clearHistory() {
-  showConfirm('مسح سجل اليوم؟ البيانات هتفضل محفوظة في التقرير الشهري.', () => {
-    const todayStr = new Date().toDateString();
-    // بنعلّم سجلات النهاردة كـ "مخفية من العرض" بدل ما نمسحها من الذاكرة بس —
-    // كده بتفضل مخفية حتى لو الـ sync الدوري جاب البيانات تاني من الـ DB
-    // (المشكلة اللي كانت بتخلي السجل يرجع تاني بعد الحذف)
-    const idsToHide = [];
-    history.forEach(h => {
-      if (new Date(h.startTime).toDateString() === todayStr) {
-        h.hiddenFromLog = true;
-        idsToHide.push(h.id);
-      }
-    });
-    addClearedIds(idsToHide); // حفظ دائم في الجهاز — الأولوية الأساسية
-    saveHistory();
+  showConfirm('مسح سجل اليوم؟ التقرير الشهري هيفضل محفوظ.', () => {
+    markClearedNow();
     updateHistory();
-    dbHideTodayHistory(idsToHide); // محاولة إضافية لتحديث الـ DB لباقي الأجهزة (لو العمود موجود)
-    showToast('🗑️', 'تم مسح سجل اليوم', 'البيانات محفوظة في التقرير الشهري', 'info');
+    showToast('🗑️', 'تم مسح السجل', 'التقرير الشهري محفوظ', 'info');
   });
 }
 
@@ -1723,8 +1711,9 @@ function updateDailySummary() {
     'هوكي هواء - طاولة 1':'hockey','هوكي هواء - طاولة 2':'hockey',
     'بيبي فوت - طاولة 1':'babyfoot','بيبي فوت - طاولة 2':'babyfoot',
   };
+  const clearedTs = getClearedTs();
   history.forEach(h=>{
-    if(h.hiddenFromLog) return;
+    if(Number(h.startTime) <= clearedTs) return;
     if(new Date(h.startTime).toDateString()!==todayStr) return;
     const cat = labelMap[h.game];
     if(cat && cats[cat]) { cats[cat].minutes+=h.duration||0; cats[cat].revenue+=h.price||0; cats[cat].sessions+=1; }
@@ -1748,35 +1737,17 @@ function updateDailySummary() {
 const LS_LAST_CLEAR = 'church_last_clear_v1';
 
 function autoMidnightClear() {
-  const now = new Date();
-  const todayStr = now.toDateString();
+  const todayStr = new Date().toDateString();
   const lastClear = localStorage.getItem(LS_LAST_CLEAR);
-
-  // لو اليوم مختلف عن آخر مسح، اخفي سجل الأمس تلقائياً من العرض
-  if (lastClear && lastClear !== todayStr) {
-    const yesterdayStr = new Date(lastClear).toDateString();
-    // بنعلّم سجلات الأيام اللي فاتت كـ "مخفية" (مش بنمسحها من الذاكرة بس)
-    // عشان الـ sync الدوري ميرجعهاش تاني من الـ DB
-    const idsToHide = [];
-    history.forEach(h => {
-      if (new Date(h.startTime).toDateString() !== todayStr && !h.hiddenFromLog) {
-        h.hiddenFromLog = true;
-        idsToHide.push(h.id);
-      }
-    });
-    addClearedIds(idsToHide); // حفظ دائم في الجهاز
-    saveHistory();
+  if (lastClear !== todayStr) {
+    markClearedNow();
     updateHistory();
-    dbHideTodayHistory(idsToHide);
-    console.log('تم المسح التلقائي لسجل:', yesterdayStr);
+    localStorage.setItem(LS_LAST_CLEAR, todayStr);
   }
-  localStorage.setItem(LS_LAST_CLEAR, todayStr);
 }
 
 function scheduleMidnightClear() {
-  // بنتأكد كل 30 ثانية لو اليوم اتغير، بدل ما نعتمد على setTimeout واحد لبكرة
-  // (المتصفح ممكن يبطّئ الـ setTimeout الطويل لو الصفحة مصغّرة/في الخلفية،
-  // فده كان ممكن يخلي المسح التلقائي يتأخر أو ميحصلش)
+  // نفحص كل 30 ثانية لو اليوم اتغير (أمان أكثر من setTimeout واحد)
   setInterval(autoMidnightClear, 30 * 1000);
 }
 
