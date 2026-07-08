@@ -1128,6 +1128,18 @@ async function dbDeleteHistoryEntry(hId) {
     await supaFetch('booking_history?id=eq.' + hId, 'DELETE');
   } finally { pendingWrites--; }
 }
+
+// ── مزامنة قائمة الانتظار مع قاعدة البيانات (عشان تظهر على كل الأجهزة/التليفونات) ──
+async function dbSaveQueue(unitId) {
+  pendingWrites++;
+  try {
+    const items = queues[unitId] || [];
+    await supaFetch('booking_queue?unit_id=eq.' + unitId, 'DELETE');
+    if (items.length) {
+      await supaFetch('booking_queue', 'POST', { unit_id: unitId, items });
+    }
+  } finally { pendingWrites--; }
+}
 async function dbClearAllHistory() {
   pendingWrites++;
   try {
@@ -1145,11 +1157,14 @@ async function dbHideTodayHistory(ids) {
   finally { pendingWrites--; }
 }
 async function dbLoadAll() {
-  const [books, hist] = await Promise.all([
+  const [books, hist, queueRowsRaw] = await Promise.all([
     supaFetch('bookings?select=*'),
-    supaFetch('booking_history?select=*&order=start_time.desc&limit=100')
+    supaFetch('booking_history?select=*&order=start_time.desc&limit=100'),
+    supaFetch('booking_queue?select=*')
   ]);
-  return { books: books||[], hist: hist||[] };
+  // queueRowsRaw بيبقى null لو الفيتش فشل (مثلاً الجدول booking_queue مش موجود لسه)
+  // في الحالة دي لازم نفرّق عن مصفوفة فاضية فعلاً، عشان منمسحش الطابور المحلي غلط
+  return { books: books||[], hist: hist||[], queueRows: queueRowsRaw, queueOk: queueRowsRaw !== null };
 }
 
 // ─── GAME DEFINITIONS ─────────────────────────────────────────────────────────
@@ -1409,7 +1424,7 @@ async function syncFromDB() {
   // عشان منمسحش الحجز أو السجل اللي لسه بيتحفظ (ده كان سبب إن الحجز يقفل لوحده)
   if (pendingWrites > 0) return;
   try {
-    const { books, hist } = await dbLoadAll();
+    const { books, hist, queueRows, queueOk } = await dbLoadAll();
     // اتأكد إن مفيش كتابة بدأت أثناء ما إحنا بنجيب البيانات (race condition)
     if (pendingWrites > 0) return;
 
@@ -1465,6 +1480,15 @@ async function syncFromDB() {
       };
     });
     saveBookings();
+
+    // -- قائمة الانتظار من DB (بتظهر على كل الأجهزة زي التليفون في مود المتابعة) --
+    // لو الفيتش فشل (مثلاً جدول booking_queue لسه مش متعمول) سيبي الطابور المحلي زي ما هو
+    if (queueOk) {
+      const dbQueues = {};
+      queueRows.forEach(r => { dbQueues[r.unit_id] = r.items || []; });
+      queues = dbQueues;
+      saveQueues();
+    }
   } catch(e) {
     console.warn('DB sync failed, using localStorage:', e);
   }
@@ -1549,6 +1573,7 @@ function addToQueue(id) {
     queues[id].push({ name, dur: st.dur, mode: st.mode, price, isOpenTime:false });
   }
   saveQueues();
+  dbSaveQueue(id); // خزّن قائمة الانتظار في الداتابيز عشان تظهر فورًا على كل الأجهزة
   if (nameInput) nameInput.value = ''; // فضي الحقل قبل إعادة البناء عشان مايرجعش الاسم القديم
   renderGames();
   const qLast = queues[id][queues[id].length-1];
@@ -1560,6 +1585,7 @@ function removeFromQueue(id, idx) {
   if (!queues[id]) return;
   const removed = queues[id].splice(idx, 1)[0];
   saveQueues();
+  dbSaveQueue(id);
   renderGames();
   if (removed) showToast('🗑️','تم الحذف',`تم حذف ${removed.name} من الطابور`,'info');
 }
@@ -1568,6 +1594,7 @@ function startNextInQueue(id) {
   if (!queues[id] || !queues[id].length) return;
   const next = queues[id].shift();
   saveQueues();
+  dbSaveQueue(id);
   const unit = UNITS.find(u=>u.id===id);
   const now = Date.now();
   warned[id] = false;
@@ -2202,12 +2229,12 @@ syncFromDB().then(() => {
   updateHistory();
 });
 
-// Poll DB every 15 seconds to catch bookings made on other devices
+// Poll DB every 3 ثواني بدل 15 — عشان أي تغيير من الأدمن يظهر شبه فوري في مود المتابعة على أي جهاز/تليفون
 setInterval(async () => {
   await syncFromDB();
   renderGames();
   updateHistory();
-}, 15000);
+}, 3000);
 
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
