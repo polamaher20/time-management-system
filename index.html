@@ -792,6 +792,79 @@
     font-weight: 600;
   }
 
+/* ─── QUEUE ──────────────────────────────────────────────────────────────── */
+.queue-section { margin-top:0.75rem; border-top:1px solid var(--border); padding-top:0.6rem; }
+.queue-header  { font-size:0.72rem; font-weight:700; color:var(--text-muted); margin-bottom:0.4rem; display:flex; align-items:center; justify-content:space-between; }
+.queue-count   { background:var(--gold); color:#000; border-radius:999px; padding:0.05rem 0.45rem; font-size:0.68rem; font-weight:800; }
+.queue-list    { display:flex; flex-direction:column; gap:0.25rem; margin-bottom:0.5rem; max-height:120px; overflow-y:auto; }
+.queue-item    { display:flex; align-items:center; justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.28rem 0.5rem; font-size:0.7rem; }
+.queue-item .q-pos { font-weight:800; color:var(--gold); margin-left:0.25rem; min-width:1rem; }
+.queue-item .q-del { background:none; border:none; cursor:pointer; color:var(--danger); font-size:0.9rem; padding:0 0.2rem; line-height:1; }
+.queue-add { display:flex; gap:0.3rem; align-items:center; margin-top:0.3rem; }
+.queue-add input  { flex:1; min-width:0; }
+.queue-add .btn-q { white-space:nowrap; padding:0.32rem 0.6rem; font-size:0.72rem; border-radius:7px; border:1.5px solid var(--gold); background:transparent; color:var(--gold); font-family:'Cairo',sans-serif; font-weight:700; cursor:pointer; }
+.queue-add .btn-q:hover { background:var(--gold); color:#000; }
+/* ─── OPEN TIME ──────────────────────────────────────────────────────────── */
+.open-elapsed  { font-size:0.68rem; color:var(--text-muted); text-align:center; margin-top:0.1rem; }
+.open-price-live { font-size:1.05rem; font-weight:800; color:var(--gold); display:block; text-align:center; }
+.badge-open    { background:#7c3aed22; color:#a78bfa; border:1px solid #7c3aed55; padding:0.15rem 0.6rem; border-radius:999px; font-size:0.68rem; font-weight:700; }
+.btn-open-time { width:100%; padding:0.48rem; border-radius:8px; border:1.5px solid #a78bfa; background:transparent; color:#a78bfa; font-family:'Cairo',sans-serif; font-weight:700; font-size:0.8rem; cursor:pointer; margin-top:0.3rem; transition:all .18s; }
+.btn-open-time:hover { background:#a78bfa; color:#fff; }
+/* ─── QUEUE ADD FORM ─────────────────────────────────────────────────────── */
+.queue-add-form {
+  margin-top: 0.6rem;
+  padding: 0.65rem 0.7rem 0.6rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.queue-add-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.queue-name-input {
+  font-size: 0.78rem;
+  padding: 0.38rem 0.55rem;
+}
+.queue-add-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+}
+.queue-price-badge {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--gold);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  white-space: nowrap;
+}
+.btn-add-queue {
+  flex: 1;
+  padding: 0.42rem 0.5rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--q-accent, var(--gold));
+  color: #fff;
+  font-family: 'Cairo', sans-serif;
+  font-weight: 800;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: opacity .18s, transform .12s;
+  letter-spacing: 0.01em;
+}
+.btn-add-queue:hover  { opacity: .88; }
+.btn-add-queue:active { transform: scale(.97); }
 </style>
 </head>
 <body>
@@ -1119,10 +1192,11 @@ const DUR_OPTS = [
 
 let bookings = {};   // unitId -> booking obj
 let history  = [];
+let queues   = {};   // unitId -> [{name, dur, mode}]
 let gameState = {};  // unitId -> { dur, mode }
 let isDark = false;
 let warned = {};
-const recentlyEnded = new Set(); // حجوزات انتهت مؤخراً — الـ sync ميرجعهاش
+const recentlyEnded = new Set();
 let activeAlarms = {};
 let alarmCtx = null;
 
@@ -1289,7 +1363,8 @@ function saveBookings() {
   try {
     const s = {};
     Object.entries(bookings).forEach(([id,b]) => {
-      s[id] = { name:b.name, duration:b.duration, startTime:b.startTime, endTime:b.endTime, price:b.price, mode:b.mode, unitLabel:b.unitLabel };
+      s[id] = { name:b.name, duration:b.duration, startTime:b.startTime, endTime:b.endTime,
+                 price:b.price, mode:b.mode, unitLabel:b.unitLabel, isOpenTime:b.isOpenTime||false };
     });
     localStorage.setItem(LS_B, JSON.stringify(s));
   } catch(e){}
@@ -1312,9 +1387,11 @@ function loadFromLocalStorage() {
     if (!raw) return;
     const saved = JSON.parse(raw);
     Object.entries(saved).forEach(([id,b]) => {
-      if (b.endTime > Date.now()) {
-        warned[id] = (b.endTime - Date.now()) <= 5*60000;
-        bookings[id] = { ...b, intervalId: setInterval(() => tickBooking(id), 1000) };
+      const endTime = Number(b.endTime);
+      // الأوبن تايم ما عندوش وقت انتهاء حقيقي — حمّله دايماً
+      if (b.isOpenTime || endTime > Date.now()) {
+        warned[id] = !b.isOpenTime && (endTime - Date.now()) <= 5*60000;
+        bookings[id] = { ...b, endTime, startTime: Number(b.startTime), intervalId: setInterval(() => tickBooking(id), 1000) };
       }
     });
   } catch(e){}
@@ -1352,9 +1429,10 @@ async function syncFromDB() {
 
     // شيل الحجوزات المحلية اللي مش موجودة في DB بعد grace period 30 ثانية
     Object.keys(bookings).forEach(localId => {
+      // شيل بس الحجوزات اللي انتهى وقتها — متمسحش حجوزات مش في DB لأن الـ upsert ممكن يكون لسه في الطريق
       if (!dbBookingIds.has(localId)) {
         const b = bookings[localId];
-        if ((now - Number(b.startTime || 0)) > 30000) {
+        if (Number(b.endTime || 0) <= now && !b.isOpenTime) {
           clearInterval(b.intervalId);
           delete bookings[localId];
         }
@@ -1364,16 +1442,18 @@ async function syncFromDB() {
     // أضف أو حدّث الحجوزات الجاية من DB
     books.forEach(r => {
       if (recentlyEnded.has(r.id)) return;
-      const endTime = Number(r.end_time);
+      const endTime  = Number(r.end_time);
       const startTime = Number(r.start_time);
-      if (endTime <= now) { dbDeleteBooking(r.id); return; }
+      if (endTime <= now && r.duration !== 0) { dbDeleteBooking(r.id); return; }
       const existing = bookings[r.id];
-      if (existing && Number(existing.endTime) === endTime) return; // نفس الحجز شغال ← متلمسوش
+      // نفس الحجز شغال محلياً — متلمسوش (مهم للأوبن تايم عشان isOpenTime ما يتمسحش)
+      if (existing && Number(existing.endTime) === endTime) return;
       if (existing) clearInterval(existing.intervalId);
       warned[r.id] = (endTime - now) <= 5 * 60000;
       bookings[r.id] = {
         name: r.name, duration: r.duration, startTime, endTime,
         price: r.price, mode: r.mode, unitLabel: r.unit_label,
+        isOpenTime: r.duration === 0, // ← يرجّع علامة الأوبن تايم من DB
         intervalId: setInterval(() => tickBooking(r.id), 1000)
       };
     });
@@ -1403,6 +1483,150 @@ function getRingClass(id) {
   if(pct<=0.1) return 'danger'; if(pct<=0.25) return 'warning'; return '';
 }
 
+// ─── QUEUE ────────────────────────────────────────────────────────────────────
+const LS_Q = 'church_queues_v1';
+let queueFormState = {}; // unitId -> {dur, mode} — حالة فورم إضافة الطابور
+
+function saveQueues() { try { localStorage.setItem(LS_Q, JSON.stringify(queues)); } catch(e){} }
+function loadQueues() { try { queues = JSON.parse(localStorage.getItem(LS_Q) || '{}'); } catch(e){} }
+
+function setQueueFormDur(id, dur) {
+  const unit = UNITS.find(u=>u.id===id);
+  if (!queueFormState[id]) queueFormState[id] = { dur:30, mode: unit?.hasModes?'single':'pair' };
+  queueFormState[id].dur = dur;
+  queueFormState[id].isOpenTime = false;
+  renderGames();
+}
+function setQueueFormMode(id, mode) {
+  if (!queueFormState[id]) queueFormState[id] = { dur:30, mode };
+  queueFormState[id].mode = mode;
+  renderGames();
+}
+function toggleQueueCustom(id) {
+  const unit = UNITS.find(u=>u.id===id);
+  if (!queueFormState[id]) queueFormState[id] = { dur:30, mode: unit?.hasModes?'single':'pair' };
+  queueFormState[id].isOpenTime = false;
+  queueFormState[id].dur = 'custom';
+  renderGames();
+  setTimeout(()=>document.getElementById(`qcustom-min-${id}`)?.focus(), 50);
+}
+function updateQueueCustomDur(id, val) {
+  const n = parseInt(val);
+  if (!queueFormState[id]) queueFormState[id] = { dur:30, mode:'single' };
+  queueFormState[id].dur = n>0 ? n : 'custom';
+  queueFormState[id].isOpenTime = false;
+  const unit = UNITS.find(u=>u.id===id);
+  const priceEl = document.getElementById(`qprice-${id}`);
+  if (priceEl && n>0) priceEl.textContent = `💰 ${calcPrice(unit, n, queueFormState[id].mode)} ج`;
+}
+function toggleQueueOpenTime(id) {
+  const unit = UNITS.find(u=>u.id===id);
+  if (!queueFormState[id]) queueFormState[id] = { dur:30, mode: unit?.hasModes?'single':'pair' };
+  queueFormState[id].isOpenTime = !queueFormState[id].isOpenTime;
+  renderGames();
+}
+
+function addToQueue(id) {
+  const unit = UNITS.find(u=>u.id===id);
+  const nameInput = document.getElementById(`qname-${id}`);
+  const name = nameInput?.value.trim();
+  if (!name) { showToast('⚠️','تنبيه','أدخل الاسم','warning'); return; }
+  const st = queueFormState[id] || { dur:30, mode: unit.hasModes?'single':'pair' };
+  if (st.isOpenTime) {
+    if (!queues[id]) queues[id] = [];
+    queues[id].push({ name, dur:0, mode: st.mode, price:0, isOpenTime:true });
+  } else {
+    if (typeof st.dur !== 'number' || st.dur < 1) { showToast('⚠️','تنبيه','اختر أو أدخل المدة','warning'); return; }
+    if (!queues[id]) queues[id] = [];
+    const price = calcPrice(unit, st.dur, st.mode);
+    queues[id].push({ name, dur: st.dur, mode: st.mode, price, isOpenTime:false });
+  }
+  saveQueues();
+  if (nameInput) nameInput.value = ''; // فضي الحقل قبل إعادة البناء عشان مايرجعش الاسم القديم
+  renderGames();
+  const qLast = queues[id][queues[id].length-1];
+  const label = qLast.isOpenTime ? 'أوبن تايم' : `${qLast.dur} د`;
+  showToast('📋','تمت الإضافة',`${name} (${label}) في قائمة الانتظار — ${queues[id].length} في الطابور`,'info');
+}
+
+function removeFromQueue(id, idx) {
+  if (!queues[id]) return;
+  const removed = queues[id].splice(idx, 1)[0];
+  saveQueues();
+  renderGames();
+  if (removed) showToast('🗑️','تم الحذف',`تم حذف ${removed.name} من الطابور`,'info');
+}
+
+function startNextInQueue(id) {
+  if (!queues[id] || !queues[id].length) return;
+  const next = queues[id].shift();
+  saveQueues();
+  const unit = UNITS.find(u=>u.id===id);
+  const now = Date.now();
+  warned[id] = false;
+
+  if (next.isOpenTime) {
+    gameState[id] = { dur: gameState[id]?.dur || 30, mode: next.mode };
+    const bObj = { name:next.name, duration:0, startTime:now, endTime: now + 12*60*60*1000,
+                    price:0, mode:next.mode, unitLabel:unit.label, isOpenTime:true,
+                    intervalId: setInterval(()=>tickBooking(id), 1000) };
+    bookings[id] = bObj;
+    saveBookings();
+    dbSaveBooking(id, bObj);
+    const hEntry = { id:id+'_'+now, unitId:id, game:unit.label, name:next.name, duration:0, price:0,
+                      startTime:now, endTime:null, status:'active', mode:'أوبن تايم' };
+    if (!history.find(h=>h.id===hEntry.id)) { history.unshift(hEntry); dbSaveHistoryEntry(hEntry); }
+    updateHistory();
+    showToast('⏱️',`▶ بدأ التالي — ${unit.label}`,`${next.name} | أوبن تايم`,'success');
+    renderGames();
+    return;
+  }
+
+  gameState[id] = { dur: next.dur, mode: next.mode };
+  const price = calcPrice(unit, next.dur, next.mode);
+  const endTime = now + next.dur * 60000;
+  const bObj = { name:next.name, duration:next.dur, startTime:now, endTime, price, mode:next.mode, unitLabel:unit.label,
+                  intervalId: setInterval(()=>tickBooking(id), 1000) };
+  bookings[id] = bObj;
+  saveBookings();
+  dbSaveBooking(id, bObj);
+  const modeLabel = next.mode==='double'?'زوجي':(next.mode==='pair'?'اتنين':'فردي');
+  const hEntry = { id:id+'_'+now, unitId:id, game:unit.label, name:next.name, duration:next.dur, price, startTime:now, endTime, status:'active', mode:modeLabel };
+  if (!history.find(h=>h.id===hEntry.id)) { history.unshift(hEntry); dbSaveHistoryEntry(hEntry); }
+  updateHistory();
+  showToast('🎮',`▶ بدأ التالي — ${unit.label}`,`${next.name} | ${next.dur} د | ${price} ج`,'success');
+  renderGames();
+}
+
+// ─── OPEN TIME ─────────────────────────────────────────────────────────────────
+function bookOpenTime(id) {
+  const unit = UNITS.find(u=>u.id===id);
+  const name = document.getElementById(`name-${id}`)?.value.trim();
+  if (!name) { showToast('⚠️','تنبيه','أدخل الاسم','warning'); return; }
+  if (bookings[id]) { showToast('⚠️','تنبيه','يوجد حجز نشط','warning'); return; }
+  const mode = unit.hasModes ? (gameState[id]?.mode || 'single') : 'pair';
+  const now = Date.now();
+  warned[id] = false;
+  const bObj = { name, duration:0, startTime:now, endTime: now + 12*60*60*1000,
+                  price:0, mode, unitLabel:unit.label, isOpenTime:true,
+                  intervalId: setInterval(()=>tickBooking(id), 1000) };
+  bookings[id] = bObj;
+  saveBookings();
+  dbSaveBooking(id, bObj);
+  const hEntry = { id:id+'_'+now, unitId:id, game:unit.label, name, duration:0, price:0,
+                    startTime:now, endTime:null, status:'active', mode:'أوبن تايم' };
+  history.unshift(hEntry);
+  dbSaveHistoryEntry(hEntry);
+  updateHistory();
+  showToast('⏱️',`أوبن تايم — ${unit.label}`,`${name} | بدأ الحساب`,'success');
+  renderGames();
+}
+
+function calcOpenPrice(unit, elapsedMs) {
+  const quarters = Math.ceil(elapsedMs / (15 * 60000));
+  return Math.max(1, quarters) * (unit?.basePrice?.[15] || 5);
+}
+
 // ─── RENDER CARDS ─────────────────────────────────────────────────────────────
 const GROUP_MAP = {
   'ps4a':'ps4','ps4b':'ps4',
@@ -1414,6 +1638,17 @@ const GROUP_MAP = {
 };
 
 function renderGames() {
+  // احفظ القيم اللي المستخدم بيكتبها دلوقتي (الاسم، اسم الطابور، المدة المخصصة)
+  // عشان مانمسحهاش لما نعيد بناء الكروت (مثلاً بعد المزامنة الدورية مع قاعدة البيانات)
+  const preservedInputs = {};
+  document.querySelectorAll('.game-card input.input-field, .game-card input.queue-name-input').forEach(inp => {
+    if (inp.value) preservedInputs[inp.id] = inp.value;
+  });
+  const activeEl = document.activeElement;
+  const activeId = activeEl && activeEl.id;
+  const activeSelStart = activeEl && typeof activeEl.selectionStart === 'number' ? activeEl.selectionStart : null;
+  const activeSelEnd = activeEl && typeof activeEl.selectionEnd === 'number' ? activeEl.selectionEnd : null;
+
   // Clear groups
   ['ps4','ps3','ping','hockey','billiard','babyfoot'].forEach(g => {
     const el = document.getElementById('group-'+g);
@@ -1434,9 +1669,12 @@ function renderGames() {
     const ringClass = busy ? getRingClass(u.id) : '';
     const timeDisplay = busy ? formatRemaining(u.id) : '--:--';
     const timerInfo = busy
-      ? `<div class="booked-for">حجز ${b.duration} د | ${b.mode==='double'?'زوجي':'فردي'}</div>
+      ? `<div class="booked-for">${b.isOpenTime ? '<span class="badge-open">⏱️ أوبن تايم</span>' : `حجز ${b.duration} د | ${b.mode==='double'?'زوجي':'فردي'}`}</div>
          <div class="customer-name">${b.name}</div>
-         <div class="end-time">ينتهي: ${formatTime(b.endTime)}</div>`
+         ${b.isOpenTime
+           ? `<div class="open-elapsed">جاري الحساب... <span class="open-price-live" id="open-price-${u.id}">0 ج</span></div>`
+           : `<div class="end-time">ينتهي: ${formatTime(b.endTime)}</div>`
+         }`
       : `<div class="booked-for" style="color:var(--text-muted)">متاح الآن</div>`;
 
     // Modes row
@@ -1467,9 +1705,76 @@ function renderGames() {
         </div>
         <div class="price-badge">السعر: <strong id="price-${u.id}">${price}</strong> جنيه <span id="mode-label-${u.id}" style="color:var(--text-muted);font-size:0.68rem">${u.hasModes?(st.mode==='double'?'· زوجي':'· فردي'):'· زوجي'}</span></div>
         <button class="btn-book" style="background:${u.accentColor};color:white" onclick="book('${u.id}')">&#9989; احجز الآن</button>
+        <button class="btn-open-time" onclick="bookOpenTime('${u.id}')">⏱️ أوبن تايم</button>
       </div>`;
 
-    const stopBtn = `<button class="btn-stop" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button>`;
+    const q = queues[u.id] || [];
+
+    // ── قائمة الانتظار للكارد المشغول (إضافة جديدة) ──────────────────────
+    const qState = queueFormState[u.id] || { dur:30, mode: u.hasModes?'single':'pair' };
+    const qDurTabs = DUR_OPTS.map(d=> {
+      if (d.val === 'custom') {
+        const isActive = !qState.isOpenTime && qState.dur==='custom' || (!qState.isOpenTime && typeof qState.dur==='number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===qState.dur));
+        return `<button type="button" class="dur-tab ${isActive?'active':''}" id="qcustom-tab-${u.id}" onclick="toggleQueueCustom('${u.id}')">${d.label}</button>`;
+      }
+      return `<button type="button" class="dur-tab ${!qState.isOpenTime && qState.dur===d.val?'active':''}" onclick="setQueueFormDur('${u.id}',${d.val})">${d.label}</button>`;
+    }).join('');
+    const qShowCustom = !qState.isOpenTime && (qState.dur==='custom' || (typeof qState.dur==='number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===qState.dur)));
+    const qModeRow = u.hasModes
+      ? `<div class="form-row" style="margin:0.25rem 0">
+           <button type="button" class="mode-btn ${qState.mode==='single'?'active':''}" style="flex:1;font-size:0.7rem;padding:0.28rem" onclick="setQueueFormMode('${u.id}','single')">👤 فردي</button>
+           <button type="button" class="mode-btn ${qState.mode==='double'?'active':''}" style="flex:1;font-size:0.7rem;padding:0.28rem" onclick="setQueueFormMode('${u.id}','double')">👥 زوجي</button>
+         </div>`
+      : '';
+    const qPrice = qState.isOpenTime ? '⏱️ أوبن تايم' : (typeof qState.dur==='number' ? `💰 ${calcPrice(u, qState.dur, qState.mode)} ج` : '—');
+
+    const qAddForm = `
+      <div class="queue-add-form">
+        <div class="queue-add-label">➕ إضافة للطابور</div>
+        <input class="input-field queue-name-input" id="qname-${u.id}" placeholder="اسم الشخص" type="text">
+        <div class="dur-tabs" id="q-dur-tabs-${u.id}">${qDurTabs}</div>
+        <div id="qcustom-input-${u.id}" style="display:${qShowCustom?'block':'none'};margin-top:0.25rem">
+          <input class="input-field" type="number" min="1" max="480" placeholder="أدخل الدقائق" id="qcustom-min-${u.id}" value="${typeof qState.dur==='number'?qState.dur:''}" oninput="updateQueueCustomDur('${u.id}', this.value)">
+        </div>
+        <button type="button" class="btn-open-time" style="width:100%;margin-top:0.3rem;${qState.isOpenTime?`background:${u.accentColor};color:white`:''}" onclick="toggleQueueOpenTime('${u.id}')">⏱️ ${qState.isOpenTime?'أوبن تايم مُفعّل ✓':'أوبن تايم'}</button>
+        ${qModeRow}
+        <div class="queue-add-footer">
+          <span class="queue-price-badge">${qPrice}</span>
+          <button class="btn-add-queue" style="--q-accent:${u.accentColor}" onclick="addToQueue('${u.id}')">＋ إضافة للطابور</button>
+        </div>
+      </div>`;
+
+    const qItems = q.map((qi,i) => `
+      <div class="queue-item">
+        <span><span class="q-pos">${i+1}.</span> ${qi.name} | ${qi.isOpenTime ? '⏱️ أوبن تايم' : qi.dur+'د'} | ${qi.mode==='double'?'زوجي':'فردي'}${qi.isOpenTime?'':` | ${qi.price}ج`}</span>
+        <button class="q-del" onclick="removeFromQueue('${u.id}',${i})" title="حذف">✕</button>
+      </div>`).join('');
+
+    const queueListSection = q.length ? `
+      <div style="margin-top:0.4rem">
+        <div class="queue-header">
+          <span>📋 قائمة الانتظار</span>
+          <span class="queue-count">${q.length}</span>
+        </div>
+        <div class="queue-list">${qItems}</div>
+      </div>` : '';
+
+    // ── قسم الطابور حسب حالة الكارد ──────────────────────────────────────
+    const busyQueueSection = busy
+      ? `<div class="queue-section">${queueListSection}${qAddForm}</div>`
+      : '';
+
+    const freeQueueSection = !busy && q.length ? `
+      <div class="queue-section" style="margin-top:0.5rem">
+        <div class="queue-header">
+          <span>📋 قائمة الانتظار</span>
+          <span class="queue-count">${q.length}</span>
+        </div>
+        <div class="queue-list">${qItems}</div>
+        <button style="width:100%;padding:0.45rem;border-radius:8px;border:none;background:${u.accentColor};color:white;font-family:'Cairo',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;margin-top:0.35rem" onclick="startNextInQueue('${u.id}')">▶ ابدأ حجز ${q[0].name} | ${q[0].isOpenTime ? '⏱️ أوبن تايم' : q[0].dur+'د'} | ${q[0].mode==='double'?'زوجي':'فردي'}${q[0].isOpenTime?'':` | ${q[0].price}ج`}</button>
+      </div>` : '';
+
+    const stopBtn = `<button class="btn-stop" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button>${busyQueueSection}`;
 
     const cardHtml = `
     <div class="game-card" id="card-${u.id}" style="${accentStyle}">
@@ -1488,7 +1793,7 @@ function renderGames() {
           </div>
           <div class="timer-info">${timerInfo}</div>
         </div>
-        ${busy ? stopBtn : bookingForm}
+        ${busy ? stopBtn : bookingForm + freeQueueSection}
       </div>
     </div>`;
     // Inject card into correct group
@@ -1507,6 +1812,22 @@ function renderGames() {
       gameState[u.id] = gameState[u.id] || { dur:30, mode: u.hasModes?'single':'pair' };
     }
   });
+
+  // رجّع القيم اللي كان المستخدم بيكتبها قبل إعادة البناء
+  Object.keys(preservedInputs).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = preservedInputs[id];
+  });
+  // رجّع الفوكس والمكان اللي كان الكيرسور واقف فيه لو كان المستخدم بيكتب فعلاً
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) {
+      el.focus();
+      if (activeSelStart !== null && activeSelEnd !== null && el.setSelectionRange) {
+        try { el.setSelectionRange(activeSelStart, activeSelEnd); } catch(e) {}
+      }
+    }
+  }
 }
 
 // ─── MODE / DUR CONTROLS ──────────────────────────────────────────────────────
@@ -1587,38 +1908,63 @@ function book(id) {
 
 function tickBooking(id) {
   const b = bookings[id]; if(!b) return;
-  const rem = b.endTime - Date.now();
   const timeEl = document.getElementById(`time-${id}`);
-  const ring = document.getElementById(`ring-${id}`);
-  if(timeEl) timeEl.textContent = formatRemaining(id);
-  if(ring) {
+  const ring   = document.getElementById(`ring-${id}`);
+
+  // ── أوبن تايم: بيعد للأمام ──────────────────────────────────────────────
+  if (b.isOpenTime) {
+    const elapsed = Date.now() - b.startTime;
+    const h = Math.floor(elapsed / 3600000);
+    const m = Math.floor((elapsed % 3600000) / 60000);
+    const s = Math.floor((elapsed % 60000) / 1000);
+    const pad = n => String(n).padStart(2,'0');
+    if (timeEl) timeEl.textContent = h > 0
+      ? `${pad(h)}:${pad(m)}:${pad(s)}`
+      : `${pad(m)}:${pad(s)}`;
+    // حلقة تدور ببطء — تمثيل بصري فقط
+    if (ring) {
+      const cycle = (elapsed / 1000) % 188.5;
+      ring.style.strokeDashoffset = String(cycle);
+      ring.style.stroke = '#a78bfa';
+    }
+    const unit = UNITS.find(u=>u.id===id);
+    const priceEl = document.getElementById(`open-price-${id}`);
+    if (priceEl) priceEl.textContent = calcOpenPrice(unit, elapsed) + ' ج';
+    return;
+  }
+
+  // ── حجز عادي ──────────────────────────────────────────────────────────────
+  const rem = b.endTime - Date.now();
+  if (timeEl) timeEl.textContent = formatRemaining(id);
+  if (ring) {
     ring.style.strokeDashoffset = getRingOffset(id);
     const cls = getRingClass(id);
     ring.className = `ring-progress ${cls}`;
     const unit = UNITS.find(u=>u.id===id);
-    if(!cls || cls==='') ring.style.stroke = unit?.accentColor || '';
+    if (!cls || cls==='') ring.style.stroke = unit?.accentColor || '';
     else ring.style.stroke = cls==='danger'?'var(--danger)':'var(--warning)';
   }
-  if(!warned[id] && rem>0 && rem<=5*60000 && b.duration*60000 > 5*60000) {
+  if (!warned[id] && rem>0 && rem<=5*60000 && b.duration*60000 > 5*60000) {
     warned[id]=true;
     const unit = UNITS.find(u=>u.id===id);
-    showToast('⏰',`تحذير - ${unit?.label}`,`باقي 5 دقائق لـ ${b.name}`,'warning');
+    showToast('⏰',`تحذير — ${unit?.label}`,`باقي 5 دقائق لـ ${b.name}`,'warning');
   }
-  if(rem<=0) {
+  if (rem<=0) {
     const unit = UNITS.find(u=>u.id===id);
     clearInterval(b.intervalId);
-    recentlyEnded.add(id);
-    setTimeout(() => recentlyEnded.delete(id), 20000);
+    recentlyEnded.add(id); setTimeout(() => recentlyEnded.delete(id), 20000);
     startAlarm(id);
     showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
     const entry = history.find(h=>h.unitId===id&&h.status==='active');
-    if(entry) {
-      entry.status='completed';
-      dbUpdateStatus(entry.id, 'completed');
-    }
+    if (entry) { entry.status='completed'; dbUpdateStatus(entry.id, 'completed'); }
     delete bookings[id]; delete warned[id];
     dbDeleteBooking(id);
     saveBookings(); updateHistory(); renderGames();
+    // لو في طابور، اعرض إشعار بس — مش تبدأ أوتوماتيك
+    if (queues[id]?.length) {
+      const next = queues[id][0];
+      showToast('📋', `في طابور انتظار — ${unit?.label}`, `التالي: ${next.name} | ${next.dur}د | ${next.price}ج — دوس ابدأ من الكارد`, 'info');
+    }
   }
 }
 
@@ -1626,19 +1972,45 @@ function endBooking(id) {
   const b = bookings[id]; if(!b) return;
   const unit = UNITS.find(u=>u.id===id);
   clearInterval(b.intervalId);
-  recentlyEnded.add(id);
-  setTimeout(() => recentlyEnded.delete(id), 20000);
+  recentlyEnded.add(id); setTimeout(() => recentlyEnded.delete(id), 20000);
+
   const entry = history.find(h=>h.unitId===id&&h.status==='active');
-  if(entry) {
-    entry.status='completed';
-    dbUpdateStatus(entry.id, 'completed');
+
+  if (b.isOpenTime) {
+    const elapsed  = Date.now() - b.startTime;
+    const elapsedMin = Math.round(elapsed / 60000);
+    const finalPrice = calcOpenPrice(unit, elapsed);
+    if (entry) {
+      entry.status   = 'completed';
+      entry.duration = elapsedMin;
+      entry.price    = finalPrice;
+      entry.endTime  = Date.now();
+      dbUpdateStatus(entry.id, 'completed');
+    }
+    stopAlarm(id);
+    delete bookings[id]; delete warned[id];
+    dbDeleteBooking(id);
+    saveBookings(); updateHistory();
+    showToast('⏱️',`أوبن تايم انتهى — ${unit?.label}`,`${b.name} | ${elapsedMin} د | ${finalPrice} ج`,'success');
+    renderGames();
+    if (queues[id]?.length) {
+      const next = queues[id][0];
+      showToast('📋', `في طابور انتظار — ${unit?.label}`, `التالي: ${next.name} | ${next.dur}د | ${next.price}ج — دوس ابدأ من الكارد`, 'info');
+    }
+    return;
   }
+
+  if (entry) { entry.status='completed'; dbUpdateStatus(entry.id,'completed'); }
   stopAlarm(id);
   delete bookings[id]; delete warned[id];
   dbDeleteBooking(id);
   saveBookings(); updateHistory();
   showToast('✅',`تم الإنهاء`,`${unit?.label} — ${b.name}`,'success');
   renderGames();
+  if (queues[id]?.length) {
+    const next = queues[id][0];
+    showToast('📋', `في طابور انتظار — ${unit?.label}`, `التالي: ${next.name} | ${next.dur}د | ${next.price}ج — دوس ابدأ من الكارد`, 'info');
+  }
 }
 
 // ─── HISTORY ──────────────────────────────────────────────────────────────────
@@ -1813,6 +2185,7 @@ document.addEventListener('click', () => {
 
 // Load local data immediately (fast), then sync from DB
 loadFromLocalStorage();
+loadQueues();
 renderGames();
 updateHistory();
 
