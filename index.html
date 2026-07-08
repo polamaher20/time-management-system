@@ -1449,15 +1449,13 @@ async function syncFromDB() {
     const dbBookingIds = new Set(books.map(r => String(r.id)));
     const now = Date.now();
 
-    // شيل الحجوزات المحلية اللي مش موجودة في DB بعد grace period 30 ثانية
+    // شيل أي حجز محلي مش موجود في DB خالص — سواء اتقفل يدوي (زرار إنهاء الحجز)
+    // أو خلص وقته أو كان أوبن تايم؛ ما دام pendingWrites=0 يبقى فعلاً مش شغال
     Object.keys(bookings).forEach(localId => {
-      // شيل بس الحجوزات اللي انتهى وقتها — متمسحش حجوزات مش في DB لأن الـ upsert ممكن يكون لسه في الطريق
       if (!dbBookingIds.has(localId)) {
         const b = bookings[localId];
-        if (Number(b.endTime || 0) <= now && !b.isOpenTime) {
-          clearInterval(b.intervalId);
-          delete bookings[localId];
-        }
+        clearInterval(b.intervalId);
+        delete bookings[localId];
       }
     });
 
