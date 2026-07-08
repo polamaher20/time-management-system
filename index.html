@@ -771,10 +771,17 @@
   }
   .btn-view-only:hover { border-color: var(--text-muted); color: var(--text); }
 
-  /* View-only mode: hide all action buttons */
+  /* View-only mode: hide كل زرار أو عنصر تفاعلي بيغيّر أي حاجة */
   body.view-only .btn-book,
   body.view-only .btn-stop,
+  body.view-only .btn-open-time,
+  body.view-only .btn-add-queue,
+  body.view-only .btn-start-queue,
+  body.view-only .mode-btn,
+  body.view-only .dur-tab,
+  body.view-only .q-del,
   body.view-only .booking-form,
+  body.view-only .queue-add-form,
   body.view-only button[onclick="clearHistory()"],
   body.view-only .del-btn { display: none !important; }
   body.view-only .view-only-badge {
@@ -1771,7 +1778,7 @@ function renderGames() {
           <span class="queue-count">${q.length}</span>
         </div>
         <div class="queue-list">${qItems}</div>
-        <button style="width:100%;padding:0.45rem;border-radius:8px;border:none;background:${u.accentColor};color:white;font-family:'Cairo',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;margin-top:0.35rem" onclick="startNextInQueue('${u.id}')">▶ ابدأ حجز ${q[0].name} | ${q[0].isOpenTime ? '⏱️ أوبن تايم' : q[0].dur+'د'} | ${q[0].mode==='double'?'زوجي':'فردي'}${q[0].isOpenTime?'':` | ${q[0].price}ج`}</button>
+        <button class="btn-start-queue" style="width:100%;padding:0.45rem;border-radius:8px;border:none;background:${u.accentColor};color:white;font-family:'Cairo',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;margin-top:0.35rem" onclick="startNextInQueue('${u.id}')">▶ ابدأ حجز ${q[0].name} | ${q[0].isOpenTime ? '⏱️ أوبن تايم' : q[0].dur+'د'} | ${q[0].mode==='double'?'زوجي':'فردي'}${q[0].isOpenTime?'':` | ${q[0].price}ج`}</button>
       </div>` : '';
 
     const stopBtn = `<button class="btn-stop" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button>${busyQueueSection}`;
