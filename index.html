@@ -876,6 +876,8 @@
 </head>
 <body>
 
+<div id="syncStatusBadge" style="display:none;position:fixed;bottom:12px;left:12px;z-index:9999;background:#b45309;color:#fff;padding:0.5rem 0.9rem;border-radius:999px;font-family:'Cairo',sans-serif;font-size:0.78rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.25);align-items:center;gap:0.4rem"></div>
+
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- PIN OVERLAY -->
@@ -1057,6 +1059,12 @@ const SUPA_KEY = 'sb_publishable_bSZ7yVF4gm1TN2fCc8Mrjg_wg_cja-8';
 let pendingWrites = 0;
 
 async function supaFetch(path, method='GET', body=null) {
+  const r = await supaFetchRaw(path, method, body);
+  return r.data;
+}
+
+// بيرجع {ok, data} بدل ما يبلع الفشل، عشان نقدر نعرف نضيف العملية لقائمة إعادة المحاولة
+async function supaFetchRaw(path, method='GET', body=null) {
   const opts = {
     method,
     headers: {
@@ -1069,63 +1077,127 @@ async function supaFetch(path, method='GET', body=null) {
   if (body) opts.body = JSON.stringify(body);
   try {
     const res = await fetch(SUPA_URL + '/rest/v1/' + path, opts);
-    if (!res.ok) { console.error('Supa error:', await res.text()); return null; }
+    if (!res.ok) { console.error('Supa error:', await res.text()); return { ok:false, data:null }; }
     const text = await res.text();
-    return text ? JSON.parse(text) : null;
-  } catch(e) { console.error('Supa fetch failed:', e); return null; }
+    return { ok:true, data: text ? JSON.parse(text) : null };
+  } catch(e) { console.error('Supa fetch failed:', e); return { ok:false, data:null }; }
+}
+
+// ─── قائمة إعادة المحاولة (Outbox) ──────────────────────────────────────────────
+// لو أي عملية كتابة فشلت (النت مقطوع مثلاً) بنسجلها هنا ونحاول تاني كل شوية،
+// ونسيبها متخزنة في اللوكال ستوريدج عشان متتفقدش حتى لو المستخدم قفل الصفحة
+const LS_PENDING = 'church_pending_sync_v1';
+let pendingSync = [];
+function loadPendingSync() { try { pendingSync = JSON.parse(localStorage.getItem(LS_PENDING) || '[]'); } catch(e) { pendingSync = []; } }
+function savePendingSync() { try { localStorage.setItem(LS_PENDING, JSON.stringify(pendingSync)); } catch(e){} }
+function queueRetry(op) { pendingSync.push(op); savePendingSync(); updateSyncBadge(); }
+
+async function runSyncOp(op) {
+  if (op.type === 'saveBooking') {
+    const r1 = await supaFetchRaw('bookings?id=eq.' + op.unitId, 'DELETE');
+    const r2 = await supaFetchRaw('bookings', 'POST', { id: op.unitId, unit_id: op.unitId, ...op.data });
+    return r1.ok && r2.ok;
+  }
+  if (op.type === 'deleteBooking') {
+    return (await supaFetchRaw('bookings?id=eq.' + op.unitId, 'DELETE')).ok;
+  }
+  if (op.type === 'saveHistoryEntry') {
+    return (await supaFetchRaw('booking_history', 'POST', op.data)).ok;
+  }
+  if (op.type === 'updateStatus') {
+    return (await supaFetchRaw('booking_history?id=eq.' + op.hId, 'PATCH', { status: op.status })).ok;
+  }
+  if (op.type === 'deleteHistoryEntry') {
+    return (await supaFetchRaw('booking_history?id=eq.' + op.hId, 'DELETE')).ok;
+  }
+  if (op.type === 'saveQueue') {
+    const r1 = await supaFetchRaw('booking_queue?unit_id=eq.' + op.unitId, 'DELETE');
+    let ok2 = true;
+    if (op.items && op.items.length) ok2 = (await supaFetchRaw('booking_queue', 'POST', { unit_id: op.unitId, items: op.items })).ok;
+    return r1.ok && ok2;
+  }
+  if (op.type === 'clearAllHistory') {
+    return (await supaFetchRaw('booking_history?id=neq.__none__', 'DELETE')).ok;
+  }
+  if (op.type === 'hideTodayHistory') {
+    const filter = 'or=(' + op.ids.map(id => `id.eq.${id}`).join(',') + ')';
+    return (await supaFetchRaw('booking_history?' + filter, 'PATCH', { hidden_from_log: true })).ok;
+  }
+  return true;
+}
+
+// بيحاول ينفذ العمليات المعلّقة بالترتيب، ولو واحدة فشلت بيوقف (على الأغلب النت لسه مقطوع)
+async function flushPendingSync() {
+  if (!pendingSync.length) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  pendingWrites++;
+  try {
+    let i = 0;
+    while (i < pendingSync.length) {
+      let success = false;
+      try { success = await runSyncOp(pendingSync[i]); } catch(e) { success = false; }
+      if (success) { pendingSync.splice(i, 1); savePendingSync(); }
+      else break;
+    }
+  } finally { pendingWrites--; }
+  updateSyncBadge();
+}
+
+function updateSyncBadge() {
+  const el = document.getElementById('syncStatusBadge');
+  if (!el) return;
+  if (pendingSync.length > 0) {
+    el.style.display = 'flex';
+    el.textContent = `🔄 في انتظار الاتصال بالإنترنت (${pendingSync.length})`;
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 async function dbSaveBooking(unitId, b) {
   pendingWrites++;
   try {
+    const data = {
+      unit_label: b.unitLabel || '', name: b.name, duration: b.duration,
+      mode: b.mode, price: b.price, start_time: b.startTime, end_time: b.endTime
+    };
     // upsert: insert or replace
-    await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
-    await supaFetch('bookings', 'POST', {
-      id: unitId,
-      unit_id: unitId,
-      unit_label: b.unitLabel || '',
-      name: b.name,
-      duration: b.duration,
-      mode: b.mode,
-      price: b.price,
-      start_time: b.startTime,
-      end_time: b.endTime
-    });
+    const r1 = await supaFetchRaw('bookings?id=eq.' + unitId, 'DELETE');
+    const r2 = await supaFetchRaw('bookings', 'POST', { id: unitId, unit_id: unitId, ...data });
+    if (!r1.ok || !r2.ok) queueRetry({ type:'saveBooking', unitId, data });
   } finally { pendingWrites--; }
 }
 async function dbDeleteBooking(unitId) {
   pendingWrites++;
   try {
-    await supaFetch('bookings?id=eq.' + unitId, 'DELETE');
+    const r = await supaFetchRaw('bookings?id=eq.' + unitId, 'DELETE');
+    if (!r.ok) queueRetry({ type:'deleteBooking', unitId });
   } finally { pendingWrites--; }
 }
 async function dbSaveHistoryEntry(h) {
   pendingWrites++;
   try {
-    await supaFetch('booking_history', 'POST', {
-      id: String(h.id),
-      unit_id: h.unitId || '',
-      game: h.game,
-      name: h.name,
-      duration: h.duration,
-      mode: h.mode,
-      price: h.price,
-      start_time: h.startTime,
-      end_time: h.endTime || null,
-      status: h.status
-    });
+    const data = {
+      id: String(h.id), unit_id: h.unitId || '', game: h.game, name: h.name,
+      duration: h.duration, mode: h.mode, price: h.price,
+      start_time: h.startTime, end_time: h.endTime || null, status: h.status
+    };
+    const r = await supaFetchRaw('booking_history', 'POST', data);
+    if (!r.ok) queueRetry({ type:'saveHistoryEntry', data });
   } finally { pendingWrites--; }
 }
 async function dbUpdateStatus(hId, status) {
   pendingWrites++;
   try {
-    await supaFetch('booking_history?id=eq.' + hId, 'PATCH', { status });
+    const r = await supaFetchRaw('booking_history?id=eq.' + hId, 'PATCH', { status });
+    if (!r.ok) queueRetry({ type:'updateStatus', hId, status });
   } finally { pendingWrites--; }
 }
 async function dbDeleteHistoryEntry(hId) {
   pendingWrites++;
   try {
-    await supaFetch('booking_history?id=eq.' + hId, 'DELETE');
+    const r = await supaFetchRaw('booking_history?id=eq.' + hId, 'DELETE');
+    if (!r.ok) queueRetry({ type:'deleteHistoryEntry', hId });
   } finally { pendingWrites--; }
 }
 
@@ -1134,16 +1206,17 @@ async function dbSaveQueue(unitId) {
   pendingWrites++;
   try {
     const items = queues[unitId] || [];
-    await supaFetch('booking_queue?unit_id=eq.' + unitId, 'DELETE');
-    if (items.length) {
-      await supaFetch('booking_queue', 'POST', { unit_id: unitId, items });
-    }
+    const r1 = await supaFetchRaw('booking_queue?unit_id=eq.' + unitId, 'DELETE');
+    let ok2 = true;
+    if (items.length) ok2 = (await supaFetchRaw('booking_queue', 'POST', { unit_id: unitId, items })).ok;
+    if (!r1.ok || !ok2) queueRetry({ type:'saveQueue', unitId, items });
   } finally { pendingWrites--; }
 }
 async function dbClearAllHistory() {
   pendingWrites++;
   try {
-    await supaFetch('booking_history?id=neq.__none__', 'DELETE');
+    const r = await supaFetchRaw('booking_history?id=neq.__none__', 'DELETE');
+    if (!r.ok) queueRetry({ type:'clearAllHistory' });
   } finally { pendingWrites--; }
 }
 async function dbHideTodayHistory(ids) {
@@ -1152,19 +1225,24 @@ async function dbHideTodayHistory(ids) {
   try {
     // بنحدّث كل صف بيه بالـ id بتاعه (PATCH بيه فلتر IN عن طريق or=())
     const filter = 'or=(' + ids.map(id => `id.eq.${id}`).join(',') + ')';
-    await supaFetch('booking_history?' + filter, 'PATCH', { hidden_from_log: true });
+    const r = await supaFetchRaw('booking_history?' + filter, 'PATCH', { hidden_from_log: true });
+    if (!r.ok) queueRetry({ type:'hideTodayHistory', ids });
   } catch(e) { console.error('dbHideTodayHistory failed:', e); }
   finally { pendingWrites--; }
 }
 async function dbLoadAll() {
-  const [books, hist, queueRowsRaw] = await Promise.all([
+  const [booksRaw, histRaw, queueRowsRaw] = await Promise.all([
     supaFetch('bookings?select=*'),
     supaFetch('booking_history?select=*&order=start_time.desc&limit=100'),
     supaFetch('booking_queue?select=*')
   ]);
-  // queueRowsRaw بيبقى null لو الفيتش فشل (مثلاً الجدول booking_queue مش موجود لسه)
-  // في الحالة دي لازم نفرّق عن مصفوفة فاضية فعلاً، عشان منمسحش الطابور المحلي غلط
-  return { books: books||[], hist: hist||[], queueRows: queueRowsRaw, queueOk: queueRowsRaw !== null };
+  // أي واحد من دول بيرجع null لو الفيتش فشل (النت مقطوع مثلاً) — لازم نفرّق
+  // عن مصفوفة فاضية فعلاً، عشان منمسحش الحجوزات/السجل/الطابور المحلي غلط
+  return {
+    books: booksRaw||[], booksOk: booksRaw !== null,
+    hist: histRaw||[], histOk: histRaw !== null,
+    queueRows: queueRowsRaw, queueOk: queueRowsRaw !== null
+  };
 }
 
 // ─── GAME DEFINITIONS ─────────────────────────────────────────────────────────
@@ -1424,12 +1502,19 @@ async function syncFromDB() {
   // عشان منمسحش الحجز أو السجل اللي لسه بيتحفظ (ده كان سبب إن الحجز يقفل لوحده)
   if (pendingWrites > 0) return;
   try {
-    const { books, hist, queueRows, queueOk } = await dbLoadAll();
+    const { books, booksOk, hist, histOk, queueRows, queueOk } = await dbLoadAll();
     // اتأكد إن مفيش كتابة بدأت أثناء ما إحنا بنجيب البيانات (race condition)
     if (pendingWrites > 0) return;
 
+    // لو فشل تحميل الحجوزات (النت مقطوع مثلاً)، ماتلمسش أي حاجة محلية خالص
+    // وسيب الحجوزات الشغالة زي ما هي لحد ما النت يرجع ويعمل sync تاني
+    if (!booksOk) {
+      console.warn('تعذر تحميل الحجوزات من الداتابيز (النت مقطوع؟) — هيتم الاحتفاظ بالحالة المحلية بدون تغيير');
+      return;
+    }
+
     // -- History from DB --
-    if (hist.length > 0) {
+    if (histOk && hist.length > 0) {
       const dbIds = new Set(hist.map(r => String(r.id)));
       const localOnly = history.filter(h => !dbIds.has(String(h.id)));
       const fromDB = hist.map(r => ({
@@ -2218,21 +2303,37 @@ document.addEventListener('click', () => {
 // Load local data immediately (fast), then sync from DB
 loadFromLocalStorage();
 loadQueues();
+loadPendingSync();
 renderGames();
 updateHistory();
+updateSyncBadge();
 
 // Then pull fresh data from DB in background
-syncFromDB().then(() => {
+flushPendingSync().then(() => syncFromDB()).then(() => {
   renderGames();
   updateHistory();
 });
 
 // Poll DB every 3 ثواني بدل 15 — عشان أي تغيير من الأدمن يظهر شبه فوري في مود المتابعة على أي جهاز/تليفون
+// وكل مرة بنحاول الأول نبعت أي عمليات كانت متعلقة بسبب انقطاع النت (outbox)
 setInterval(async () => {
+  await flushPendingSync();
   await syncFromDB();
   renderGames();
   updateHistory();
 }, 3000);
+
+// أول ما النت يرجع، حاول ابعت أي عمليات معلّقة فورًا من غير ما تستنى الـ 3 ثواني
+window.addEventListener('online', async () => {
+  await flushPendingSync();
+  await syncFromDB();
+  renderGames();
+  updateHistory();
+  if (pendingSync.length === 0) showToast('✅','الاتصال رجع','تم رفع كل التحديثات المعلّقة بنجاح','success');
+});
+window.addEventListener('offline', () => {
+  showToast('🔌','النت اتقطع','هيتم حفظ أي تغيير محليًا وإرساله أول ما النت يرجع','warning');
+});
 
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
