@@ -358,6 +358,21 @@
     margin-top: 0.25rem;
   }
   .btn-stop:hover { background: var(--danger); color: white; }
+  .btn-pause {
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    border: 1.5px solid #d97706;
+    background: transparent;
+    color: #d97706;
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1;
+  }
+  .btn-pause:hover { background: #d97706; color: white; }
+  body.view-only .btn-pause { display: none !important; }
 
   /* COLOR ACCENTS PER GAME */
   .ps-card .ring-progress { stroke: var(--ps-color); }
@@ -1102,10 +1117,12 @@ async function runSyncOp(op) {
     return (await supaFetchRaw('bookings?id=eq.' + op.unitId, 'DELETE')).ok;
   }
   if (op.type === 'saveHistoryEntry') {
+    // delete-then-insert عشان لو المحاولة الأصلية نجحت فعليًا بس احنا مانعرفش، إعادة المحاولة متتعارضش (409)
+    await supaFetchRaw('booking_history?id=eq.' + encodeURIComponent(op.data.id), 'DELETE');
     return (await supaFetchRaw('booking_history', 'POST', op.data)).ok;
   }
   if (op.type === 'updateStatus') {
-    return (await supaFetchRaw('booking_history?id=eq.' + op.hId, 'PATCH', { status: op.status })).ok;
+    return (await supaFetchRaw('booking_history?id=eq.' + op.hId, 'PATCH', op.fields)).ok;
   }
   if (op.type === 'deleteHistoryEntry') {
     return (await supaFetchRaw('booking_history?id=eq.' + op.hId, 'DELETE')).ok;
@@ -1159,7 +1176,8 @@ async function dbSaveBooking(unitId, b) {
   try {
     const data = {
       unit_label: b.unitLabel || '', name: b.name, duration: b.duration,
-      mode: b.mode, price: b.price, start_time: b.startTime, end_time: b.endTime
+      mode: b.mode, price: b.price, start_time: b.startTime, end_time: b.endTime,
+      paused: b.paused||false, paused_at: b.pausedAt||null
     };
     // upsert: insert or replace
     const r1 = await supaFetchRaw('bookings?id=eq.' + unitId, 'DELETE');
@@ -1182,15 +1200,19 @@ async function dbSaveHistoryEntry(h) {
       duration: h.duration, mode: h.mode, price: h.price,
       start_time: h.startTime, end_time: h.endTime || null, status: h.status
     };
+    // delete-then-insert (upsert آمن) — لو المحاولة الأصلية فشلت في القراءة بس نجحت فعليًا،
+    // إعادة المحاولة (retry) مش هتتعارض مع الصف الموجود
+    await supaFetchRaw('booking_history?id=eq.' + encodeURIComponent(data.id), 'DELETE');
     const r = await supaFetchRaw('booking_history', 'POST', data);
     if (!r.ok) queueRetry({ type:'saveHistoryEntry', data });
   } finally { pendingWrites--; }
 }
-async function dbUpdateStatus(hId, status) {
+async function dbUpdateStatus(hId, status, fields={}) {
   pendingWrites++;
   try {
-    const r = await supaFetchRaw('booking_history?id=eq.' + hId, 'PATCH', { status });
-    if (!r.ok) queueRetry({ type:'updateStatus', hId, status });
+    const body = { status, ...fields };
+    const r = await supaFetchRaw('booking_history?id=eq.' + hId, 'PATCH', body);
+    if (!r.ok) queueRetry({ type:'updateStatus', hId, fields: body });
   } finally { pendingWrites--; }
 }
 async function dbDeleteHistoryEntry(hId) {
@@ -1464,7 +1486,8 @@ function saveBookings() {
     const s = {};
     Object.entries(bookings).forEach(([id,b]) => {
       s[id] = { name:b.name, duration:b.duration, startTime:b.startTime, endTime:b.endTime,
-                 price:b.price, mode:b.mode, unitLabel:b.unitLabel, isOpenTime:b.isOpenTime||false };
+                 price:b.price, mode:b.mode, unitLabel:b.unitLabel, isOpenTime:b.isOpenTime||false,
+                 paused:b.paused||false, pausedAt:b.pausedAt||null };
     });
     localStorage.setItem(LS_B, JSON.stringify(s));
   } catch(e){}
@@ -1491,7 +1514,12 @@ function loadFromLocalStorage() {
       // الأوبن تايم ما عندوش وقت انتهاء حقيقي — حمّله دايماً
       if (b.isOpenTime || endTime > Date.now()) {
         warned[id] = !b.isOpenTime && (endTime - Date.now()) <= 5*60000;
-        bookings[id] = { ...b, endTime, startTime: Number(b.startTime), intervalId: setInterval(() => tickBooking(id), 1000) };
+        const paused = !!b.paused;
+        bookings[id] = {
+          ...b, endTime, startTime: Number(b.startTime), paused,
+          pausedAt: paused ? Number(b.pausedAt) : null,
+          intervalId: paused ? null : setInterval(() => tickBooking(id), 1000)
+        };
       }
     });
   } catch(e){}
@@ -1549,17 +1577,21 @@ async function syncFromDB() {
       if (recentlyEnded.has(r.id)) return;
       const endTime  = Number(r.end_time);
       const startTime = Number(r.start_time);
-      if (endTime <= now && r.duration !== 0) { dbDeleteBooking(r.id); return; }
+      const paused = !!r.paused;
+      const pausedAt = r.paused_at != null ? Number(r.paused_at) : null;
+      if (endTime <= now && r.duration !== 0 && !paused) { dbDeleteBooking(r.id); return; }
       const existing = bookings[r.id];
-      // نفس الحجز شغال محلياً — متلمسوش (مهم للأوبن تايم عشان isOpenTime ما يتمسحش)
-      if (existing && Number(existing.endTime) === endTime) return;
+      // نفس الحجز شغال محلياً بنفس حالة الإيقاف المؤقت — متلمسوش (مهم للأوبن تايم عشان isOpenTime ما يتمسحش)
+      if (existing && Number(existing.endTime) === endTime
+          && !!existing.paused === paused && Number(existing.pausedAt||0) === Number(pausedAt||0)) return;
       if (existing) clearInterval(existing.intervalId);
       warned[r.id] = (endTime - now) <= 5 * 60000;
       bookings[r.id] = {
         name: r.name, duration: r.duration, startTime, endTime,
         price: r.price, mode: r.mode, unitLabel: r.unit_label,
         isOpenTime: r.duration === 0, // ← يرجّع علامة الأوبن تايم من DB
-        intervalId: setInterval(() => tickBooking(r.id), 1000)
+        paused, pausedAt,
+        intervalId: paused ? null : setInterval(() => tickBooking(r.id), 1000)
       };
     });
     saveBookings();
@@ -1578,9 +1610,10 @@ async function syncFromDB() {
 }
 
 // ─── TIMER HELPERS ────────────────────────────────────────────────────────────
+function nowFor(b) { return (b && b.paused && b.pausedAt) ? b.pausedAt : Date.now(); }
 function formatRemaining(id) {
   const b = bookings[id]; if(!b) return '--:--';
-  const rem = Math.max(0, b.endTime - Date.now());
+  const rem = Math.max(0, b.endTime - nowFor(b));
   const m = Math.floor(rem/60000), s = Math.floor((rem%60000)/1000);
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
@@ -1589,11 +1622,11 @@ function formatTime(ts) {
 }
 function getRingOffset(id) {
   const b = bookings[id]; if(!b) return 188.5;
-  return 188.5 * Math.min((Date.now()-b.startTime)/(b.duration*60000), 1);
+  return 188.5 * Math.min((nowFor(b)-b.startTime)/(b.duration*60000), 1);
 }
 function getRingClass(id) {
   const b = bookings[id]; if(!b) return '';
-  const pct = (b.endTime-Date.now())/(b.duration*60000);
+  const pct = (b.endTime-nowFor(b))/(b.duration*60000);
   if(pct<=0.1) return 'danger'; if(pct<=0.25) return 'warning'; return '';
 }
 
@@ -1740,8 +1773,12 @@ function bookOpenTime(id) {
 }
 
 function calcOpenPrice(unit, elapsedMs) {
-  const quarters = Math.ceil(elapsedMs / (15 * 60000));
-  return Math.max(1, quarters) * (unit?.basePrice?.[15] || 5);
+  const q15 = 15 * 60000;
+  let quarters = Math.floor(elapsedMs / q15);
+  // أول ربع ساعة بيتحسب من أول لحظة حجز (حد أدنى)، وبعد كده السعر بيزيد
+  // بس لما الربع اللي بعده يخلص فعليًا، مش أول ما يبدأ
+  if (elapsedMs > 0 && quarters === 0) quarters = 1;
+  return quarters * (unit?.basePrice?.[15] || 5);
 }
 
 // ─── RENDER CARDS ─────────────────────────────────────────────────────────────
@@ -1785,13 +1822,17 @@ function renderGames() {
     const ringOffset = busy ? getRingOffset(u.id) : 188.5;
     const ringClass = busy ? getRingClass(u.id) : '';
     const timeDisplay = busy ? formatRemaining(u.id) : '--:--';
+    const openElapsedMs = busy && b.isOpenTime ? Math.max(0, nowFor(b) - b.startTime) : 0;
+    const openPriceNow = busy && b.isOpenTime ? calcOpenPrice(u, openElapsedMs) : 0;
+    const pausedNote = busy && b.paused ? `<div class="paused-note" style="color:#d97706;font-weight:700;font-size:0.72rem;margin-top:0.1rem">⏸ الوقت متوقف مؤقتًا</div>` : '';
     const timerInfo = busy
       ? `<div class="booked-for">${b.isOpenTime ? '<span class="badge-open">⏱️ أوبن تايم</span>' : `حجز ${b.duration} د | ${b.mode==='double'?'زوجي':'فردي'}`}</div>
          <div class="customer-name">${b.name}</div>
          ${b.isOpenTime
-           ? `<div class="open-elapsed">جاري الحساب... <span class="open-price-live" id="open-price-${u.id}">0 ج</span></div>`
+           ? `<div class="open-elapsed">جاري الحساب... <span class="open-price-live" id="open-price-${u.id}">${openPriceNow} ج</span></div>`
            : `<div class="end-time">ينتهي: ${formatTime(b.endTime)}</div>`
-         }`
+         }
+         ${pausedNote}`
       : `<div class="booked-for" style="color:var(--text-muted)">متاح الآن</div>`;
 
     // Modes row
@@ -1803,22 +1844,24 @@ function renderGames() {
 
     // Duration tabs
     const durTabs = DUR_OPTS.map((d,i) => {
-      const isActive = d.val !== 'custom' && st.dur === d.val ? 'active' : (d.val==='custom' && typeof st.dur==='number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===st.dur) ? 'active':'');
+      const isActive = d.val !== 'custom' && st.dur === d.val ? 'active' : (d.val==='custom' && (st.dur==='custom' || (typeof st.dur==='number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===st.dur))) ? 'active':'');
       if (d.val === 'custom') {
         return `<button type="button" class="dur-tab ${isActive}" id="custom-tab-${u.id}" onclick="toggleCustom('${u.id}')">${d.label}</button>`;
       }
       return `<button type="button" class="dur-tab ${st.dur===d.val?'active':''}" onclick="selectDur('${u.id}',${d.val})">${d.label}</button>`;
     }).join('');
 
+
     const price = typeof st.dur === 'number' ? calcPrice(u, st.dur, st.mode) : '—';
+    const showCustom = st.dur === 'custom' || (typeof st.dur === 'number' && !DUR_OPTS.slice(0,-1).find(x=>x.val===st.dur));
 
     const bookingForm = `
       <div class="booking-form">
         <input class="input-field" id="name-${u.id}" placeholder="اسم الشخص / المجموعة" type="text">
         ${modesRow}
         <div class="dur-tabs" id="dur-tabs-${u.id}">${durTabs}</div>
-        <div id="custom-input-${u.id}" style="display:none;margin-top:0.25rem">
-          <input class="input-field" type="number" min="1" max="480" placeholder="أدخل الدقائق" id="custom-min-${u.id}" oninput="updateCustomDur('${u.id}')">
+        <div id="custom-input-${u.id}" style="display:${showCustom?'block':'none'};margin-top:0.25rem">
+          <input class="input-field" type="number" min="1" max="480" placeholder="أدخل الدقائق" id="custom-min-${u.id}" value="${typeof st.dur==='number' && showCustom?st.dur:''}" oninput="updateCustomDur('${u.id}')">
         </div>
         <div class="price-badge">السعر: <strong id="price-${u.id}">${price}</strong> جنيه <span id="mode-label-${u.id}" style="color:var(--text-muted);font-size:0.68rem">${u.hasModes?(st.mode==='double'?'· زوجي':'· فردي'):'· زوجي'}</span></div>
         <button class="btn-book" style="background:${u.accentColor};color:white" onclick="book('${u.id}')">&#9989; احجز الآن</button>
@@ -1891,7 +1934,12 @@ function renderGames() {
         <button class="btn-start-queue" style="width:100%;padding:0.45rem;border-radius:8px;border:none;background:${u.accentColor};color:white;font-family:'Cairo',sans-serif;font-weight:700;font-size:0.82rem;cursor:pointer;margin-top:0.35rem" onclick="startNextInQueue('${u.id}')">▶ ابدأ حجز ${q[0].name} | ${q[0].isOpenTime ? '⏱️ أوبن تايم' : q[0].dur+'د'} | ${q[0].mode==='double'?'زوجي':'فردي'}${q[0].isOpenTime?'':` | ${q[0].price}ج`}</button>
       </div>` : '';
 
-    const stopBtn = `<button class="btn-stop" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button>${busyQueueSection}`;
+    const pauseResumeBtn = busy
+      ? (b.paused
+          ? `<button class="btn-pause" style="background:#16a34a" onclick="resumeBooking('${u.id}')">▶ استئناف</button>`
+          : `<button class="btn-pause" onclick="pauseBooking('${u.id}')">⏸ إيقاف مؤقت</button>`)
+      : '';
+    const stopBtn = `<div class="form-row" style="margin-bottom:0.4rem">${pauseResumeBtn}<button class="btn-stop" style="flex:1" onclick="endBooking('${u.id}')">&#9209; إنهاء الحجز</button></div>${busyQueueSection}`;
 
     const cardHtml = `
     <div class="game-card" id="card-${u.id}" style="${accentStyle}">
@@ -1975,12 +2023,15 @@ function selectDur(id, dur) {
 }
 
 function toggleCustom(id) {
+  gameState[id] = gameState[id] || { dur:30, mode:'single' };
   const ci = document.getElementById(`custom-input-${id}`);
   const showing = ci?.style.display !== 'none';
   if(ci) ci.style.display = showing ? 'none' : 'block';
   if(!showing) {
+    gameState[id].dur = 'custom';
     document.querySelectorAll(`#dur-tabs-${id} .dur-tab`).forEach(t=>t.classList.remove('active'));
     document.getElementById(`custom-tab-${id}`)?.classList.add('active');
+    setTimeout(()=>document.getElementById(`custom-min-${id}`)?.focus(), 50);
   }
 }
 
@@ -2073,7 +2124,10 @@ function tickBooking(id) {
     startAlarm(id);
     showToast('🔔',`انتهى الحجز!`,`${unit?.label} — ${b.name}`,'expired',id);
     const entry = history.find(h=>h.unitId===id&&h.status==='active');
-    if (entry) { entry.status='completed'; dbUpdateStatus(entry.id, 'completed'); }
+    if (entry) {
+      entry.status='completed';
+      dbUpdateStatus(entry.id, 'completed', { price: entry.price, duration: entry.duration, end_time: entry.endTime });
+    }
     delete bookings[id]; delete warned[id];
     dbDeleteBooking(id);
     saveBookings(); updateHistory(); renderGames();
@@ -2083,6 +2137,36 @@ function tickBooking(id) {
       showToast('📋', `في طابور انتظار — ${unit?.label}`, `التالي: ${next.name} | ${next.dur}د | ${next.price}ج — دوس ابدأ من الكارد`, 'info');
     }
   }
+}
+
+// ─── إيقاف مؤقت / استئناف ─────────────────────────────────────────────────────
+// فكرة التنفيذ: وقت الاستئناف بنزوّد startTime (وendTime لو مش أوبن تايم) بمقدار
+// فترة التوقف بالظبط، فالوقت المتبقي (أو المنقضي في الأوبن تايم) بيفضل زي ما هو
+// من غير ما نحتاج نعدّل منطق العد التنازلي/التصاعدي في أي مكان تاني
+function pauseBooking(id) {
+  const b = bookings[id]; if (!b || b.paused) return;
+  clearInterval(b.intervalId);
+  b.intervalId = null;
+  b.paused = true;
+  b.pausedAt = Date.now();
+  saveBookings();
+  dbSaveBooking(id, b);
+  renderGames();
+  showToast('⏸','تم الإيقاف المؤقت',`${b.name} — الوقت متوقف دلوقتي`,'warning');
+}
+
+function resumeBooking(id) {
+  const b = bookings[id]; if (!b || !b.paused) return;
+  const pauseDuration = Date.now() - b.pausedAt;
+  b.startTime += pauseDuration;
+  if (!b.isOpenTime) b.endTime += pauseDuration;
+  b.paused = false;
+  b.pausedAt = null;
+  b.intervalId = setInterval(() => tickBooking(id), 1000);
+  saveBookings();
+  dbSaveBooking(id, b);
+  renderGames();
+  showToast('▶','تم الاستئناف',`${b.name} — الوقت شغال تاني`,'success');
 }
 
 function endBooking(id) {
@@ -2102,7 +2186,9 @@ function endBooking(id) {
       entry.duration = elapsedMin;
       entry.price    = finalPrice;
       entry.endTime  = Date.now();
-      dbUpdateStatus(entry.id, 'completed');
+      // مهم: لازم نبعت السعر/المدة/وقت النهاية الصح للداتابيز، مش بس الحالة
+      // (ده كان سبب إن الفلوس بترجع تتسجل غلط بعد شوية ثواني بسبب المزامنة)
+      dbUpdateStatus(entry.id, 'completed', { price: finalPrice, duration: elapsedMin, end_time: entry.endTime });
     }
     stopAlarm(id);
     delete bookings[id]; delete warned[id];
@@ -2117,7 +2203,11 @@ function endBooking(id) {
     return;
   }
 
-  if (entry) { entry.status='completed'; dbUpdateStatus(entry.id,'completed'); }
+  if (entry) {
+    entry.status = 'completed';
+    entry.endTime = Date.now(); // وقت الإنهاء الفعلي، مش الوقت المجدول أصلاً
+    dbUpdateStatus(entry.id, 'completed', { price: entry.price, duration: entry.duration, end_time: entry.endTime });
+  }
   stopAlarm(id);
   delete bookings[id]; delete warned[id];
   dbDeleteBooking(id);
