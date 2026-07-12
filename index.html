@@ -2443,6 +2443,12 @@ const LS_LAST_CLEAR = 'church_last_clear_v1';
 function autoMidnightClear() {
   const todayStr = new Date().toDateString();
   const lastClear = localStorage.getItem(LS_LAST_CLEAR);
+  // أول مرة الجهاز ده يفتح السيستم خالص (مفيش أي تسجيل سابق) — منمسحش حاجة،
+  // بس نسجّل تاريخ النهارده عشان نعرف نفرّق بعدين لو فعلاً اليوم اتغيّر
+  if (lastClear === null) {
+    localStorage.setItem(LS_LAST_CLEAR, todayStr);
+    return;
+  }
   if (lastClear !== todayStr) {
     markClearedNow();
     updateHistory();
