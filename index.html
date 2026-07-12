@@ -165,9 +165,11 @@
     display: flex; align-items: center; gap: 0.4rem;
   }
   .game-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
-  .game-group-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .game-group-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
   .game-group-cards.solo { grid-template-columns: 1fr; max-width: 500px; }
-  @media (max-width: 560px) { .game-group-cards { grid-template-columns: 1fr; } }
+  .game-group-row { display: flex; gap: 1rem; align-items: flex-start; }
+  .game-group-row .game-group { flex: 1; min-width: 0; }
+  @media (max-width: 560px) { .game-group-cards { grid-template-columns: 1fr; } .game-group-row { flex-direction: column; } }
 
   .game-card {
     background: var(--surface);
@@ -506,6 +508,108 @@
 
   .toast.expired { border-color: var(--danger); }
   .toast.warning { border-color: var(--warning); }
+
+  /* SYNC BADGE — دائرة عايمة تحت-شمال، بتظهر بس لو فيه عمليات معلّقة */
+  .sync-banner {
+    display: none;
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    z-index: 9999;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--warning);
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+    cursor: pointer;
+    animation: syncSlideUp 0.35s ease, syncRingPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes syncSlideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes syncRingPulse {
+    0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.28), 0 0 0 0 rgba(217,119,6,0.45); }
+    50% { box-shadow: 0 8px 24px rgba(0,0,0,0.28), 0 0 0 8px rgba(217,119,6,0); }
+  }
+  .sync-icon { font-size: 1.35rem; line-height: 1; }
+  .sync-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--danger);
+    color: #fff;
+    font-family: 'Cairo', sans-serif;
+    font-weight: 800;
+    font-size: 0.68rem;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    border: 2px solid var(--bg);
+  }
+
+  /* Custom tooltip بدل tooltip المتصفح العادي */
+  .sync-tooltip {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    min-width: 230px;
+    max-width: 260px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--warning);
+    border-radius: 12px;
+    padding: 0.65rem 0.85rem;
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: right;
+    direction: rtl;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(6px);
+    transition: opacity .18s ease, transform .18s ease;
+    pointer-events: none;
+    white-space: normal;
+  }
+  .sync-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 22px;
+    border: 7px solid transparent;
+    border-top-color: var(--warning);
+  }
+  .sync-tooltip::before {
+    content: '';
+    position: absolute;
+    top: calc(100% - 2.5px);
+    left: 24px;
+    border: 5.5px solid transparent;
+    border-top-color: var(--surface);
+    z-index: 1;
+  }
+  .sync-banner:hover .sync-tooltip,
+  .sync-banner:focus-visible .sync-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .sync-tooltip .sync-tip-hint {
+    display: block;
+    margin-top: 0.35rem;
+    color: var(--warning);
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
 
   @keyframes slideDown {
     from { opacity: 0; transform: translateY(-20px); }
@@ -892,7 +996,11 @@
 </head>
 <body>
 
-<div id="syncStatusBadge" style="display:none;position:fixed;bottom:12px;left:12px;z-index:9999;background:#b45309;color:#fff;padding:0.5rem 0.9rem;border-radius:999px;font-family:'Cairo',sans-serif;font-size:0.78rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.25);align-items:center;gap:0.4rem"></div>
+<div id="syncStatusBadge" class="sync-banner" onclick="manualFlushSync()" role="button" tabindex="0">
+  <div class="sync-tooltip" id="syncTooltip"></div>
+  <span class="sync-count" id="syncCount"></span>
+  <span class="sync-icon">🔄</span>
+</div>
 
 <div class="toast-container" id="toastContainer"></div>
 
@@ -960,17 +1068,15 @@
       <div class="game-group-label">🏓 بينج بونج</div>
       <div class="game-group-cards" id="group-ping"></div>
     </div>
-    <div class="game-group">
-      <div class="game-group-label">🏒 هوكي هواء</div>
-      <div class="game-group-cards" id="group-hockey"></div>
-    </div>
-    <div class="game-group">
-      <div class="game-group-label">⚽ بيبي فوت</div>
-      <div class="game-group-cards" id="group-babyfoot"></div>
-    </div>
-    <div class="game-group">
-      <div class="game-group-label">🎱 بلياردو</div>
-      <div class="game-group-cards solo" id="group-billiard"></div>
+    <div class="game-group-row">
+      <div class="game-group">
+        <div class="game-group-label">🏒 هوكي هواء</div>
+        <div class="game-group-cards" id="group-hockey"></div>
+      </div>
+      <div class="game-group">
+        <div class="game-group-label">🎱 بلياردو</div>
+        <div class="game-group-cards" id="group-billiard"></div>
+      </div>
     </div>
   </div>
 
@@ -1106,7 +1212,7 @@ const LS_PENDING = 'church_pending_sync_v1';
 let pendingSync = [];
 function loadPendingSync() { try { pendingSync = JSON.parse(localStorage.getItem(LS_PENDING) || '[]'); } catch(e) { pendingSync = []; } }
 function savePendingSync() { try { localStorage.setItem(LS_PENDING, JSON.stringify(pendingSync)); } catch(e){} }
-function queueRetry(op) { pendingSync.push(op); savePendingSync(); updateSyncBadge(); }
+function queueRetry(op) { pendingSync.push({ ...op, queuedAt: op.queuedAt || Date.now() }); savePendingSync(); updateSyncBadge(); }
 
 async function runSyncOp(op) {
   if (op.type === 'saveBooking') {
@@ -1161,15 +1267,39 @@ async function flushPendingSync() {
   updateSyncBadge();
 }
 
+function formatPendingAge(ms) {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'أقل من دقيقة';
+  if (mins < 60) return `${mins} دقيقة`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins ? `${hrs} ساعة و${remMins} دقيقة` : `${hrs} ساعة`;
+}
+
 function updateSyncBadge() {
   const el = document.getElementById('syncStatusBadge');
+  const countEl = document.getElementById('syncCount');
+  const tipEl = document.getElementById('syncTooltip');
   if (!el) return;
   if (pendingSync.length > 0) {
+    const oldestTs = Math.min(...pendingSync.map(op => op.queuedAt || Date.now()));
+    const age = formatPendingAge(Date.now() - oldestTs);
     el.style.display = 'flex';
-    el.textContent = `🔄 في انتظار الاتصال بالإنترنت (${pendingSync.length})`;
+    if (countEl) countEl.textContent = pendingSync.length;
+    if (tipEl) tipEl.innerHTML = `فيه <b>${pendingSync.length}</b> عملية لسه معلّقة ومترفعتش للسيرفر (من ${age}).<span class="sync-tip-hint">دوس هنا عشان تحاول تاني</span>`;
   } else {
     el.style.display = 'none';
   }
+}
+
+async function manualFlushSync() {
+  showToast('🔄','بنحاول نرفع دلوقتي','جاري إعادة إرسال العمليات المعلّقة','info');
+  await flushPendingSync();
+  await syncFromDB();
+  renderGames();
+  updateHistory();
+  if (pendingSync.length === 0) showToast('✅','تم الرفع','كل التحديثات المعلّقة اترفعت بنجاح','success');
+  else showToast('⚠️','لسه فيه معلّق','تأكد إن الجهاز متصل بالنت وحاول تاني','warning');
 }
 
 async function dbSaveBooking(unitId, b) {
@@ -1290,19 +1420,14 @@ const UNITS = [
     basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
   { id:'ping2', label:'بينج بونج - تربيزة 2', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
+  { id:'ping3', label:'بينج بونج - تربيزة 3', parent:'ping', icon:'🏓', cardClass:'ping-card', accentColor:'#E8380D',
+    basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
   // Billiard x1
   { id:'billiard', label:'بلياردو', parent:'billiard', icon:'🎱', cardClass:'billiard-card', accentColor:'#1A6B3C',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doublePrice:{15:15, 30:30, 60:60, 120:120}, doubleExtra:10, hasModes:true },
-  // Air Hockey x2 (always 2 players facing each other = pair mode only)
+  // Air Hockey x1 (always 2 players facing each other = pair mode only)
   { id:'hockey1', label:'هوكي هواء - طاولة 1', parent:'hockey', icon:'🏒', cardClass:'hockey-card', accentColor:'#1A4A8B',
     basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false },
-  { id:'hockey2', label:'هوكي هواء - طاولة 2', parent:'hockey', icon:'🏒', cardClass:'hockey-card', accentColor:'#1A4A8B',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false },
-  // Baby Foot x2 (4 players per table, same pricing as hockey/billiard/ping)
-  { id:'babyfoot1', label:'بيبي فوت - طاولة 1', parent:'babyfoot', icon:'⚽', cardClass:'babyfoot-card', accentColor:'#B8860B',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false, playerLabel:'أربعة لاعبين دايماً' },
-  { id:'babyfoot2', label:'بيبي فوت - طاولة 2', parent:'babyfoot', icon:'⚽', cardClass:'babyfoot-card', accentColor:'#B8860B',
-    basePrice:{15:5, 30:10, 60:20, 120:40}, doubleExtra:0, hasModes:false, playerLabel:'أربعة لاعبين دايماً' },
 ];
 
 const DUR_OPTS = [
@@ -1786,10 +1911,9 @@ function calcOpenPrice(unit, elapsedMs) {
 const GROUP_MAP = {
   'ps4a':'ps4','ps4b':'ps4',
   'ps3a':'ps3','ps3b':'ps3',
-  'ping1':'ping','ping2':'ping',
+  'ping1':'ping','ping2':'ping','ping3':'ping',
   'billiard':'billiard',
-  'hockey1':'hockey','hockey2':'hockey',
-  'babyfoot1':'babyfoot','babyfoot2':'babyfoot',
+  'hockey1':'hockey',
 };
 
 function renderGames() {
@@ -1805,7 +1929,7 @@ function renderGames() {
   const activeSelEnd = activeEl && typeof activeEl.selectionEnd === 'number' ? activeEl.selectionEnd : null;
 
   // Clear groups
-  ['ps4','ps3','ping','hockey','billiard','babyfoot'].forEach(g => {
+  ['ps4','ps3','ping','hockey','billiard'].forEach(g => {
     const el = document.getElementById('group-'+g);
     if(el) el.innerHTML = '';
   });
@@ -2404,6 +2528,9 @@ flushPendingSync().then(() => syncFromDB()).then(() => {
   renderGames();
   updateHistory();
 });
+
+// نحدّث نص "من إمتى معلّق" كل نص دقيقة حتى لو النت لسه مقطوع (عشان الوقت يفضل دقيق)
+setInterval(() => { if (pendingSync.length) updateSyncBadge(); }, 30 * 1000);
 
 // Poll DB every 3 ثواني بدل 15 — عشان أي تغيير من الأدمن يظهر شبه فوري في مود المتابعة على أي جهاز/تليفون
 // وكل مرة بنحاول الأول نبعت أي عمليات كانت متعلقة بسبب انقطاع النت (outbox)
