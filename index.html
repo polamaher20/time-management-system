@@ -2411,11 +2411,16 @@ function updateDailySummary() {
   const labelMap = {
     'PS4 - جهاز 1':'ps4','PS4 - جهاز 2':'ps4',
     'PS3 - جهاز 1':'ps3','PS3 - جهاز 2':'ps3',
-    'بينج بونج - تربيزة 1':'ping','بينج بونج - تربيزة 2':'ping',
+    'بينج بونج - تربيزة 1':'ping','بينج بونج - تربيزة 2':'ping','بينج بونج - تربيزة 3':'ping',
     'بلياردو':'billiard',
     'هوكي هواء - طاولة 1':'hockey','هوكي هواء - طاولة 2':'hockey',
     'بيبي فوت - طاولة 1':'babyfoot','بيبي فوت - طاولة 2':'babyfoot',
   };
+  // fallback: لو أي وحدة جديدة اتضافت في UNITS ومكانتش لسه في labelMap فوق،
+  // نستنتج الفئة بتاعتها تلقائياً من UNITS.parent عشان ملخص اليوم منتقاش يجمع غلط تاني
+  UNITS.forEach(u => {
+    if (!labelMap[u.label] && cats[u.parent]) labelMap[u.label] = u.parent;
+  });
   const clearedTs = getClearedTs();
   history.forEach(h=>{
     if(Number(h.startTime) <= clearedTs) return;
