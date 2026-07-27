@@ -661,6 +661,7 @@
   }
   .history-section tr:last-child td { border-bottom: none; }
   .history-section tr:hover td { background: var(--surface2); }
+  .history-section .att-table-container tr:hover td { background: inherit; }
 
   .badge {
     display: inline-block;
@@ -823,6 +824,172 @@
   .game-monthly-card .gmc-stat .gl { font-size: 0.68rem; color: var(--text-muted); }
 
 
+  /* ─── ATTENDANCE ─────────────────────────────────────────────────────────── */
+  .att-add-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    max-width: 420px;
+  }
+  .att-add-row .input-field { flex: 1; }
+  .btn-add-staff {
+    padding: 0 1rem;
+    border-radius: 10px;
+    border: none;
+    background: var(--gold);
+    color: #1A1208;
+    font-family: 'Cairo', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s;
+  }
+  .btn-add-staff:hover { background: var(--gold-light); }
+
+  .att-legend { display: flex; gap: 0.9rem; margin-right: auto; font-size: 0.78rem; color: var(--text-muted); }
+  .att-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+  .att-jump-btn {
+    padding: 0.4rem 0.65rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .att-jump-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ─── جدول الحضور: عمود أسماء ثابت + جدول أيام بيتحرك لوحده ─────────────
+     بدل ما نعتمد على position:sticky (اللي كان بيسبب اختفاء النص أثناء
+     السكرول)، بنقسم الشكل لجدولين منفصلين جنب بعض جوه flex container:
+     جدول الأسماء ثابت في مكانه، وجدول الأيام هو بس اللي بيتسكرول أفقيًا.
+     ده تصميم بسيط ومضمون 100% ومفيهوش أي مشاكل ريندر. */
+  .att-table-container {
+    display: flex;
+    align-items: flex-start;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .att-names-col { flex-shrink: 0; width: 11rem; }
+  .att-names-col table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .att-days-scroll { flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; border-right: 1px solid var(--border); }
+  .att-days-scroll table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+
+  .attendance-table th, .attendance-table td,
+  .att-name-table th, .att-name-table td { text-align: center; }
+
+  .attendance-table thead th, .att-name-table thead th {
+    background: var(--surface2);
+    font-size: 0.68rem;
+    padding: 0.6rem 0.35rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    height: 2.9rem;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+  .attendance-table thead th { width: 4.2rem; overflow: hidden; }
+  .attendance-table thead th.att-summary-cell {
+    width: 6.3rem;
+    height: auto;
+    min-height: 2.9rem;
+    overflow: visible;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.25;
+  }
+
+  .att-day-num { display: block; font-size: 0.8rem; font-weight: 800; color: var(--text); }
+  .att-day-wd  { display: block; font-size: 0.58rem; font-weight: 600; color: var(--text-muted); margin-top: 0.1rem; }
+
+  .attendance-table tbody tr, .att-name-table tbody tr { background: var(--surface); height: 3.4rem; }
+  .attendance-table tbody tr:nth-child(even), .att-name-table tbody tr:nth-child(even) { background: var(--surface2); }
+  .attendance-table td, .att-name-table td {
+    padding: 0.4rem 0.3rem;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    overflow: hidden;
+    height: 3.4rem;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+  .attendance-table tbody tr:last-child td, .att-name-table tbody tr:last-child td { border-bottom: none; }
+
+  .att-name-table .att-name-cell {
+    text-align: right !important;
+    font-weight: 700;
+    width: 11rem;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 0.5rem 0.6rem !important;
+  }
+  .att-summary-cell { width: 6.3rem; }
+  .att-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    background: var(--gold);
+    color: #1A1208;
+    font-size: 0.66rem;
+    font-weight: 800;
+    vertical-align: middle;
+    margin-left: 0.4rem;
+    flex-shrink: 0;
+  }
+  .att-name-text { display: inline-block; vertical-align: middle; max-width: 5.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .att-del-btn {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.35rem;
+    background: none; border: none; cursor: pointer; color: var(--danger);
+    font-size: 0.85rem; padding: 0.1rem 0.2rem; opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+  .att-cell {
+    min-width: 3.6rem;
+    min-height: 2.4rem;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    font-size: 0.6rem;
+    line-height: 1.2;
+    transition: border-color 0.15s;
+    user-select: none;
+    padding: 0.15rem;
+    margin: 0 auto;
+  }
+  .att-cell.has-checkin { background: #D1FAE5; border-color: #6EE7B7; }
+  .att-cell.has-checkin.has-checkout { background: #DBEAFE; border-color: #93C5FD; }
+  .dark .att-cell.has-checkin { background: #064E3B; border-color: #0F5132; }
+  .dark .att-cell.has-checkin.has-checkout { background: #1E3A5F; border-color: #2563EB; }
+  .att-time-in  { color: #065F46; font-weight: 800; }
+  .att-time-out { color: #991B1B; font-weight: 800; }
+  .dark .att-time-in  { color: #6EE7B7; }
+  .dark .att-time-out { color: #FCA5A5; }
+  .att-count-cell { font-weight: 800; color: var(--gold-dim); white-space: nowrap; }
+  .att-hours-cell { font-weight: 800; color: var(--gold-dim); font-size: 0.68rem; white-space: normal; word-break: break-word; line-height: 1.25; display: inline-block; }
+  .dark .att-count-cell, .dark .att-hours-cell { color: var(--gold-light); }
+  .attendance-table thead th.att-today-col { background: rgba(201,168,76,0.22); color: var(--gold-dim); }
+  .attendance-table thead th.att-weekend-col { background: rgba(107,87,68,0.14); color: var(--text-muted); }
+  .dark .attendance-table thead th.att-weekend-col { background: rgba(255,255,255,0.06); }
+
   /* ─── PIN SCREEN ─────────────────────────────────────────────────────────── */
   #pinOverlay {
     position: fixed; inset: 0; z-index: 99999;
@@ -878,9 +1045,8 @@
     background: var(--gold); color: #1A1208;
     font-family: 'Cairo', sans-serif;
     font-size: 0.9rem; font-weight: 700;
-    cursor: pointer; transition: all 0.2s; width: 100%;
+    cursor: pointer; width: 100%;
   }
-  .btn-pin-enter:hover { background: var(--gold-light); }
   .btn-view-only {
     padding: 0.5rem;
     border-radius: 10px;
@@ -889,9 +1055,8 @@
     color: var(--text-muted);
     font-family: 'Cairo', sans-serif;
     font-size: 0.82rem; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; width: 100%;
+    cursor: pointer; width: 100%;
   }
-  .btn-view-only:hover { border-color: var(--text-muted); color: var(--text); }
 
   /* View-only mode: hide كل زرار أو عنصر تفاعلي بيغيّر أي حاجة */
   body.view-only .btn-book,
@@ -905,7 +1070,11 @@
   body.view-only .booking-form,
   body.view-only .queue-add-form,
   body.view-only button[onclick="clearHistory()"],
+  body.view-only .att-add-row,
+  body.view-only .att-del-btn,
   body.view-only .del-btn { display: none !important; }
+  /* في وضع المتابعة فقط: خلايا الأيام تفضل بتعرض الداتا بس، من غير ما تكون قابلة للدوس عليها */
+  body.view-only .att-cell { cursor: default; pointer-events: none; }
   body.view-only .view-only-badge {
     display: inline-flex !important;
   }
@@ -1051,6 +1220,7 @@
     <button class="tab-btn active" onclick="switchTab('games')">🎮 الألعاب</button>
     <button class="tab-btn" onclick="switchTab('history')">📋 السجل</button>
     <button class="tab-btn" onclick="switchTab('monthly')">📅 التقرير الشهري</button>
+    <button class="tab-btn" onclick="switchTab('attendance')">🧑‍💼 الحضور والانصراف</button>
   </div>
 
   <!-- TAB: GAMES -->
@@ -1171,6 +1341,59 @@
     <div class="game-monthly-grid" id="gameMonthlyGrid"></div>
   </div><!-- end tab-monthly -->
 
+  <!-- TAB: ATTENDANCE -->
+  <div class="tab-panel" id="tab-attendance">
+    <div class="section-title" style="margin-top:0">🧑‍💼 حضور وانصراف الموظفين</div>
+
+    <div class="att-add-row">
+      <input type="text" id="newStaffName" class="input-field" placeholder="اسم الموظف الجديد" onkeydown="if(event.key==='Enter')addStaffMember()">
+      <button onclick="addStaffMember()" class="btn-add-staff">➕ إضافة</button>
+    </div>
+
+    <div class="month-controls">
+      <label>الشهر:</label>
+      <select id="attMonthSelect" onchange="renderAttendance()">
+        <option value="0">يناير</option><option value="1">فبراير</option>
+        <option value="2">مارس</option><option value="3">أبريل</option>
+        <option value="4">مايو</option><option value="5">يونيو</option>
+        <option value="6">يوليو</option><option value="7">أغسطس</option>
+        <option value="8">سبتمبر</option><option value="9">أكتوبر</option>
+        <option value="10">نوفمبر</option><option value="11">ديسمبر</option>
+      </select>
+      <label>السنة:</label>
+      <input type="number" id="attYearSelect" value="2026" min="2024" max="2030" onchange="renderAttendance()" style="width:80px">
+      <button type="button" class="att-jump-btn" onclick="scrollAttDays('start')">⏮ أول الشهر</button>
+      <button type="button" class="att-jump-btn" onclick="scrollAttDays('today')">🎯 اليوم</button>
+      <button type="button" class="att-jump-btn" onclick="scrollAttDays('end')">آخر الشهر ⏭</button>
+      <span class="att-legend">
+        <span class="att-legend-item"><span class="att-cell has-checkin" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> فيه حضور</span>
+        <span class="att-legend-item"><span class="att-cell has-checkin has-checkout" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> يوم كامل</span>
+        <span class="att-legend-item">دوس على أي يوم لتسجيل وقت الحضور/الانصراف</span>
+      </span>
+    </div>
+
+    <div class="history-section">
+      <div class="att-table-container">
+        <div class="att-names-col">
+          <table class="att-name-table">
+            <thead><tr><th class="att-name-cell">الموظف</th></tr></thead>
+            <tbody id="attendanceNamesBody"></tbody>
+          </table>
+        </div>
+        <div class="att-days-scroll" id="attDaysScroll">
+          <table class="attendance-table">
+            <thead>
+              <tr id="attendanceHeadRow"></tr>
+            </thead>
+            <tbody id="attendanceBody">
+              <tr><td class="empty-history">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div><!-- end tab-attendance -->
+
 </main>
 
 <script>
@@ -1248,6 +1471,21 @@ async function runSyncOp(op) {
   if (op.type === 'hideTodayHistory') {
     const filter = 'or=(' + op.ids.map(id => `id.eq.${id}`).join(',') + ')';
     return (await supaFetchRaw('booking_history?' + filter, 'PATCH', { hidden_from_log: true })).ok;
+  }
+  if (op.type === 'saveStaff') {
+    await supaFetchRaw('staff_members?id=eq.' + encodeURIComponent(op.s.id), 'DELETE');
+    return (await supaFetchRaw('staff_members', 'POST', { id: op.s.id, name: op.s.name })).ok;
+  }
+  if (op.type === 'deleteStaff') {
+    return (await supaFetchRaw('staff_members?id=eq.' + encodeURIComponent(op.id), 'DELETE')).ok;
+  }
+  if (op.type === 'saveAttendance') {
+    await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(op.rec.id), 'DELETE');
+    return (await supaFetchRaw('attendance_records', 'POST',
+      { id: op.rec.id, staff_id: op.rec.staffId, date: op.rec.date, check_in: op.rec.checkIn, check_out: op.rec.checkOut })).ok;
+  }
+  if (op.type === 'deleteAttendance') {
+    return (await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(op.id), 'DELETE')).ok;
   }
   return true;
 }
@@ -1895,13 +2133,25 @@ function bookOpenTime(id) {
   renderGames();
 }
 
-function calcOpenPrice(unit, elapsedMs) {
+function calcOpenPrice(unit, elapsedMs, mode) {
   const q15 = 15 * 60000;
   let quarters = Math.floor(elapsedMs / q15);
   // أول ربع ساعة بيتحسب من أول لحظة حجز (حد أدنى)، وبعد كده السعر بيزيد
   // بس لما الربع اللي بعده يخلص فعليًا، مش أول ما يبدأ
   if (elapsedMs > 0 && quarters === 0) quarters = 1;
-  return quarters * (unit?.basePrice?.[15] || 5);
+
+  // لازم نفرّق بين فردي وزوجي هنا زي ما بيحصل بالظبط في calcPrice،
+  // عشان الأوبن تايم كان بيتحسب دايمًا بسعر الفردي حتى لو الحجز زوجي
+  const isDouble = mode === 'double' || mode === 'pair';
+  let quarterRate;
+  if (isDouble && unit?.doublePrice?.[15] !== undefined) {
+    // ألعاب عندها جدول أسعار زوجي مخصص لكل ربع ساعة (PS4, PS3)
+    quarterRate = unit.doublePrice[15];
+  } else {
+    // ألعاب سعرها فردي + إضافة ثابتة لكل ربع ساعة في وضع الزوجي (بينج بونج، بلياردو، هوكي)
+    quarterRate = (unit?.basePrice?.[15] || 5) + (isDouble ? (unit?.doubleExtra || 0) : 0);
+  }
+  return quarters * quarterRate;
 }
 
 // ─── RENDER CARDS ─────────────────────────────────────────────────────────────
@@ -1945,7 +2195,7 @@ function renderGames() {
     const ringClass = busy ? getRingClass(u.id) : '';
     const timeDisplay = busy ? formatRemaining(u.id) : '--:--';
     const openElapsedMs = busy && b.isOpenTime ? Math.max(0, nowFor(b) - b.startTime) : 0;
-    const openPriceNow = busy && b.isOpenTime ? calcOpenPrice(u, openElapsedMs) : 0;
+    const openPriceNow = busy && b.isOpenTime ? calcOpenPrice(u, openElapsedMs, b.mode) : 0;
     const pausedNote = busy && b.paused ? `<div class="paused-note" style="color:#d97706;font-weight:700;font-size:0.72rem;margin-top:0.1rem">⏸ الوقت متوقف مؤقتًا</div>` : '';
     const timerInfo = busy
       ? `<div class="booked-for">${b.isOpenTime ? '<span class="badge-open">⏱️ أوبن تايم</span>' : `حجز ${b.duration} د | ${b.mode==='double'?'زوجي':'فردي'}`}</div>
@@ -2219,7 +2469,7 @@ function tickBooking(id) {
     }
     const unit = UNITS.find(u=>u.id===id);
     const priceEl = document.getElementById(`open-price-${id}`);
-    if (priceEl) priceEl.textContent = calcOpenPrice(unit, elapsed) + ' ج';
+    if (priceEl) priceEl.textContent = calcOpenPrice(unit, elapsed, b.mode) + ' ج';
     return;
   }
 
@@ -2302,7 +2552,7 @@ function endBooking(id) {
   if (b.isOpenTime) {
     const elapsed  = Date.now() - b.startTime;
     const elapsedMin = Math.round(elapsed / 60000);
-    const finalPrice = calcOpenPrice(unit, elapsed);
+    const finalPrice = calcOpenPrice(unit, elapsed, b.mode);
     if (entry) {
       entry.status   = 'completed';
       entry.duration = elapsedMin;
@@ -2563,7 +2813,7 @@ window.addEventListener('offline', () => {
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    b.classList.toggle('active', ['games','history','monthly'][i] === tab);
+    b.classList.toggle('active', ['games','history','monthly','attendance'][i] === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -2573,6 +2823,12 @@ function switchTab(tab) {
     document.getElementById('monthSelect').value = now.getMonth();
     document.getElementById('yearSelect').value = now.getFullYear();
     renderMonthly();
+  }
+  if (tab === 'attendance') {
+    const now = new Date();
+    document.getElementById('attMonthSelect').value = now.getMonth();
+    document.getElementById('attYearSelect').value = now.getFullYear();
+    renderAttendance();
   }
 }
 
@@ -2609,23 +2865,26 @@ async function renderMonthly() {
   const todayStr = today.toDateString();
 
   // Load directly from DB for accurate monthly data (bypasses local clearing)
-  let allHistory = history;
+  // مهم: بنفلتر بتاريخ الشهر نفسه في السيرفر (مش بنجيب أحدث 500 صف بس)،
+  // عشان لو عدد الحجوزات الكلي زاد في شهور تانية، الشهر ده منتقصش منه أيام بنفسها
+  const monthStartMs = new Date(year, month, 1, 0, 0, 0, 0).getTime();
+  const monthEndMs   = new Date(year, month + 1, 1, 0, 0, 0, 0).getTime();
+  let allHistory = history.filter(h => Number(h.startTime) >= monthStartMs && Number(h.startTime) < monthEndMs);
   try {
-    const dbHist = await supaFetch('booking_history?select=*&order=start_time.desc&limit=500');
-    if (dbHist && dbHist.length > 0) {
+    const dbHist = await supaFetch(
+      `booking_history?select=*&start_time=gte.${monthStartMs}&start_time=lt.${monthEndMs}&order=start_time.asc`
+    );
+    if (dbHist) {
       allHistory = dbHist.map(r => ({
         id: r.id, game: r.game, name: r.name, duration: r.duration,
         mode: r.mode, price: r.price, startTime: r.start_time,
         endTime: r.end_time, status: r.status
       }));
     }
-  } catch(e) { /* fallback to local */ }
+  } catch(e) { /* fallback to local, already filtered above */ }
 
-  // Filter history for this month
-  const monthEntries = allHistory.filter(h => {
-    const d = new Date(h.startTime);
-    return d.getMonth() === month && d.getFullYear() === year;
-  });
+  // البيانات جاية مفلترة على الشهر المطلوب بالفعل
+  const monthEntries = allHistory;
 
   // ── Stats cards ──
   const totalSessions = monthEntries.length;
@@ -2719,6 +2978,333 @@ function toggleDayDetail(id) {
   const row = document.getElementById(id);
   if (row) row.classList.toggle('open');
 }
+
+// ─── ATTENDANCE (حضور وانصراف الموظفين) ───────────────────────────────────────
+// staffList:   [{id, name}]
+// attendance:  [{id, staffId, date:'YYYY-MM-DD', status:'present'|'absent'}]
+// بيتخزن محليًا فورًا (سريع + شغال أوفلاين) وبيتزامن مع Supabase زي باقي السيستم.
+// لازم الجداول دي تتعمل في Supabase (شوف تعليمات الـ SQL اللي اتبعتلك):
+//   staff_members(id text primary key, name text)
+//   attendance_records(id text primary key, staff_id text, date text, status text)
+const LS_STAFF  = 'church_staff_v1';
+const LS_ATTEND = 'church_attendance_v1';
+let staffList  = [];
+let attendance = [];
+
+function loadStaffAttendanceLocal() {
+  try { staffList  = JSON.parse(localStorage.getItem(LS_STAFF)  || '[]'); } catch(e) { staffList = []; }
+  try { attendance = JSON.parse(localStorage.getItem(LS_ATTEND) || '[]'); } catch(e) { attendance = []; }
+}
+function saveStaffLocal()      { try { localStorage.setItem(LS_STAFF,  JSON.stringify(staffList));  } catch(e){} }
+function saveAttendanceLocal() { try { localStorage.setItem(LS_ATTEND, JSON.stringify(attendance)); } catch(e){} }
+
+function dateKey(y, m, d) {
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+// بيحوّل وقت من صيغة 24 ساعة (HH:MM) لصيغة 12 ساعة (h:MM ص/م) عشان العرض في خانات الجدول
+function formatTime12(t) {
+  if (!t) return '';
+  let [h, m] = t.split(':').map(Number);
+  const period = h < 12 ? 'ص' : 'م';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${String(m).padStart(2,'0')} ${period}`;
+}
+
+async function dbSaveStaff(s) {
+  pendingWrites++;
+  try {
+    await supaFetchRaw('staff_members?id=eq.' + encodeURIComponent(s.id), 'DELETE');
+    const r = await supaFetchRaw('staff_members', 'POST', { id: s.id, name: s.name });
+    if (!r.ok) queueRetry({ type:'saveStaff', s });
+  } finally { pendingWrites--; }
+}
+async function dbDeleteStaff(id) {
+  pendingWrites++;
+  try {
+    const r = await supaFetchRaw('staff_members?id=eq.' + encodeURIComponent(id), 'DELETE');
+    if (!r.ok) queueRetry({ type:'deleteStaff', id });
+    // امسح كل تسجيلات الحضور بتاعت الموظف ده كمان
+    await supaFetchRaw('attendance_records?staff_id=eq.' + encodeURIComponent(id), 'DELETE');
+  } finally { pendingWrites--; }
+}
+async function dbSaveAttendance(rec) {
+  pendingWrites++;
+  try {
+    await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(rec.id), 'DELETE');
+    const r = await supaFetchRaw('attendance_records', 'POST',
+      { id: rec.id, staff_id: rec.staffId, date: rec.date, check_in: rec.checkIn, check_out: rec.checkOut });
+    if (!r.ok) queueRetry({ type:'saveAttendance', rec });
+  } finally { pendingWrites--; }
+}
+async function dbDeleteAttendance(id) {
+  pendingWrites++;
+  try {
+    const r = await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(id), 'DELETE');
+    if (!r.ok) queueRetry({ type:'deleteAttendance', id });
+  } finally { pendingWrites--; }
+}
+
+async function syncAttendanceFromDB() {
+  try {
+    const [staffRaw, attRaw] = await Promise.all([
+      supaFetch('staff_members?select=*'),
+      supaFetch('attendance_records?select=*')
+    ]);
+    if (staffRaw) { staffList  = staffRaw.map(r => ({ id:r.id, name:r.name })); saveStaffLocal(); }
+    if (attRaw)   { attendance = attRaw.map(r => ({ id:r.id, staffId:r.staff_id, date:r.date, checkIn:r.check_in||null, checkOut:r.check_out||null })); saveAttendanceLocal(); }
+  } catch(e) { console.warn('تعذر تحميل بيانات الحضور من قاعدة البيانات:', e); }
+}
+
+function addStaffMember() {
+  const input = document.getElementById('newStaffName');
+  const name = input.value.trim();
+  if (!name) { showToast('⚠️','تنبيه','اكتب اسم الموظف الأول','warning'); return; }
+  const s = { id: 'staff_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name };
+  staffList.push(s);
+  saveStaffLocal();
+  dbSaveStaff(s);
+  input.value = '';
+  showToast('✅','تمت الإضافة',`${name} اتضاف لجدول الحضور`,'success');
+  paintAttendanceTable();
+}
+
+function removeStaffMember(id) {
+  const s = staffList.find(x => x.id === id);
+  if (!s) return;
+  showConfirm(`مسح ${s.name} من جدول الحضور نهائيًا؟ (سجل حضوره هيتمسح كمان)`, () => {
+    staffList = staffList.filter(x => x.id !== id);
+    attendance = attendance.filter(a => a.staffId !== id);
+    saveStaffLocal(); saveAttendanceLocal();
+    dbDeleteStaff(id);
+    showToast('🗑️','تم الحذف',`${s.name} اتمسح من جدول الحضور`,'info');
+    paintAttendanceTable();
+  });
+}
+
+function openAttendanceEditor(staffId, dateStr, staffName) {
+  const existing = attendance.find(a => a.staffId === staffId && a.date === dateStr);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;border:2px solid var(--gold);font-family:Cairo,sans-serif;direction:rtl';
+  const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long'});
+  box.innerHTML = `
+    <div style="text-align:center;font-weight:700;color:var(--gold);font-size:1rem;margin-bottom:0.15rem">${staffName}</div>
+    <div style="text-align:center;color:var(--text-muted);font-size:0.8rem;margin-bottom:1.1rem">${dateLabel}</div>
+    <div style="display:flex;flex-direction:column;gap:0.85rem">
+      <div>
+        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.3rem">🟢 وقت الحضور</label>
+        <div style="display:flex;gap:0.5rem">
+          <input type="time" id="attInTime" value="${existing?.checkIn || ''}" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-size:0.9rem">
+          <button id="attInNow" type="button" style="padding:0 0.8rem;border-radius:8px;border:none;background:var(--success);color:white;font-weight:700;cursor:pointer;font-size:0.75rem;white-space:nowrap">الآن</button>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.3rem">🔴 وقت الانصراف</label>
+        <div style="display:flex;gap:0.5rem">
+          <input type="time" id="attOutTime" value="${existing?.checkOut || ''}" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-size:0.9rem">
+          <button id="attOutNow" type="button" style="padding:0 0.8rem;border-radius:8px;border:none;background:var(--danger);color:white;font-weight:700;cursor:pointer;font-size:0.75rem;white-space:nowrap">الآن</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.6rem;justify-content:center;margin-top:1.4rem">
+      <button id="attCancel" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-weight:600;cursor:pointer">إلغاء</button>
+      ${existing ? `<button id="attClear" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">مسح</button>` : ''}
+      <button id="attSave" style="flex:1;padding:0.55rem;border-radius:8px;border:none;background:var(--gold);color:#1A1208;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">حفظ</button>
+    </div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+  box.querySelector('#attInNow').onclick  = () => box.querySelector('#attInTime').value  = nowHM();
+  box.querySelector('#attOutNow').onclick = () => box.querySelector('#attOutTime').value = nowHM();
+  box.querySelector('#attCancel').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const clearBtn = box.querySelector('#attClear');
+  if (clearBtn) clearBtn.onclick = () => {
+    attendance = attendance.filter(a => a.id !== existing.id);
+    saveAttendanceLocal();
+    dbDeleteAttendance(existing.id);
+    overlay.remove();
+    paintAttendanceTable();
+  };
+
+  box.querySelector('#attSave').onclick = () => {
+    const checkIn  = box.querySelector('#attInTime').value  || null;
+    const checkOut = box.querySelector('#attOutTime').value || null;
+    if (!checkIn && !checkOut) {
+      // مفيش أي وقت متسجل — لو كان في تسجيل قديم امسحه، وإلا سيب الخانة فاضية
+      if (existing) { attendance = attendance.filter(a => a.id !== existing.id); saveAttendanceLocal(); dbDeleteAttendance(existing.id); }
+      overlay.remove();
+      paintAttendanceTable();
+      return;
+    }
+    const id = existing?.id || `att_${staffId}_${dateStr}`;
+    const rec = { id, staffId, date: dateStr, checkIn, checkOut };
+    const idx = attendance.findIndex(a => a.id === id);
+    if (idx >= 0) attendance[idx] = rec; else attendance.push(rec);
+    saveAttendanceLocal();
+    dbSaveAttendance(rec);
+    overlay.remove();
+    paintAttendanceTable();
+  };
+}
+
+// بيسكرول جدول الأيام لأول الشهر / اليوم الحالي / آخر الشهر — مفيد لو فيه
+// يوم مميز (اليوم الحالي أو إجازة) في آخر الشهر ومش باين بسبب السكرول
+function scrollAttDays(where) {
+  const headEl = document.getElementById('attendanceHeadRow');
+  if (!headEl) return;
+  const dayCells = Array.from(headEl.children).filter(th => !th.classList.contains('att-summary-cell'));
+  if (!dayCells.length) return;
+  let target;
+  if (where === 'start') target = dayCells[0];
+  else if (where === 'end') target = dayCells[dayCells.length - 1];
+  else target = headEl.querySelector('th.att-today-col') || dayCells[0];
+  target.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+}
+
+function paintAttendanceTable() {
+  const monthEl = document.getElementById('attMonthSelect');
+  const yearEl  = document.getElementById('attYearSelect');
+  if (!monthEl || !yearEl) return;
+  const month = parseInt(monthEl.value);
+  const year  = parseInt(yearEl.value);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = new Date().toDateString();
+
+  // رأس جدول الأيام (بيتسكرول)
+  const headEl = document.getElementById('attendanceHeadRow');
+  const wdShort = ['أحد','إثن','ثلا','أرب','خمي','جمع','سبت'];
+  let headHtml = '';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    const isToday = new Date(year, month, d).toDateString() === todayStr;
+    const isWeekend = (dow === 5 || dow === 6); // الجمعة والسبت
+    const cls = [isToday ? 'att-today-col' : '', !isToday && isWeekend ? 'att-weekend-col' : ''].join(' ').trim();
+    headHtml += `<th class="${cls}"><span class="att-day-num">${d}</span><span class="att-day-wd">${wdShort[dow]}</span></th>`;
+  }
+  headHtml += '<th class="att-summary-cell">أيام الحضور</th><th class="att-summary-cell">إجمالي الساعات</th>';
+  headEl.innerHTML = headHtml;
+
+  const namesBodyEl = document.getElementById('attendanceNamesBody');
+  const bodyEl = document.getElementById('attendanceBody');
+
+  if (!staffList.length) {
+    namesBodyEl.innerHTML = '<tr><td class="att-name-cell">&nbsp;</td></tr>';
+    bodyEl.innerHTML = `<tr><td colspan="${daysInMonth + 2}" class="empty-history">لسه مفيش أسماء — ضيف اسم موظف من فوق</td></tr>`;
+    syncAttendanceRowHeights();
+    return;
+  }
+
+  let namesHtml = '';
+  let bodyHtml = '';
+
+  staffList.forEach(s => {
+    let presentDays = 0;
+    let totalMinutes = 0;
+    let cells = '';
+    const safeName = s.name.replace(/'/g, "\\'");
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = dateKey(year, month, d);
+      const rec = attendance.find(a => a.staffId === s.id && a.date === dateStr);
+      const dow = new Date(year, month, d).getDay();
+      const isToday = new Date(year, month, d).toDateString() === todayStr;
+      const isWeekend = (dow === 5 || dow === 6);
+      const hasIn = !!rec?.checkIn, hasOut = !!rec?.checkOut;
+      if (hasIn) presentDays++;
+      if (hasIn && hasOut) {
+        const [ih, im] = rec.checkIn.split(':').map(Number);
+        const [oh, om] = rec.checkOut.split(':').map(Number);
+        let mins = (oh * 60 + om) - (ih * 60 + im);
+        if (mins < 0) mins += 24 * 60; // شفت بيعدي نص الليل
+        totalMinutes += mins;
+      }
+      const cellCls = 'att-cell' + (hasIn ? ' has-checkin' : '') + (hasOut ? ' has-checkout' : '');
+      const inner = (hasIn || hasOut)
+        ? `${hasIn ? `<span class="att-time-in">${formatTime12(rec.checkIn)}</span>` : ''}${hasOut ? `<span class="att-time-out">${formatTime12(rec.checkOut)}</span>` : ''}`
+        : '';
+      cells += `<td><div class="${cellCls}" onclick="openAttendanceEditor('${s.id}','${dateStr}','${safeName}')">${inner}</div></td>`;
+    }
+    const hrs = Math.floor(totalMinutes / 60), mins = totalMinutes % 60;
+    const hoursLabel = totalMinutes > 0 ? `${hrs} س ${mins} د` : '—';
+    const initials = s.name.trim().slice(0, 1).toUpperCase();
+
+    namesHtml += `<tr>
+      <td class="att-name-cell">
+        <span class="att-avatar">${initials}</span>
+        <span class="att-name-text">${s.name}</span>
+        <button class="att-del-btn" onclick="removeStaffMember('${s.id}')" title="حذف الموظف">🗑️</button>
+      </td>
+    </tr>`;
+
+    bodyHtml += `<tr>
+      ${cells}
+      <td class="att-summary-cell"><span class="att-count-cell">${presentDays}</span></td>
+      <td class="att-summary-cell"><span class="att-hours-cell">${hoursLabel}</span></td>
+    </tr>`;
+  });
+
+  namesBodyEl.innerHTML = namesHtml;
+  bodyEl.innerHTML = bodyHtml;
+  syncAttendanceRowHeights();
+}
+
+// بيقيس ارتفاع كل صف فعليًا في الجدولين (الأسماء + الأيام) ويوحّد الارتفاع
+// بينهم بالظبط، عشان يفضلوا متوازيين مهما اختلف المحتوى جوه كل خلية.
+function syncAttendanceRowHeights() {
+  const namesTable = document.querySelector('#attendanceNamesBody')?.closest('table');
+  const daysTable  = document.querySelector('#attendanceBody')?.closest('table');
+  if (!namesTable || !daysTable) return;
+
+  const nameHeadRow = namesTable.querySelector('thead tr');
+  const dayHeadRow  = daysTable.querySelector('thead tr');
+  const nameRows = Array.from(namesTable.querySelectorAll('tbody tr'));
+  const dayRows  = Array.from(daysTable.querySelectorAll('tbody tr'));
+  if (nameRows.length !== dayRows.length) return;
+
+  // نصفّر أي ارتفاع متحدد يدويًا الأول عشان نقيس الطول الطبيعي الحقيقي
+  [nameHeadRow, dayHeadRow, ...nameRows, ...dayRows].forEach(r => { if (r) r.style.height = ''; });
+
+  requestAnimationFrame(() => {
+    if (nameHeadRow && dayHeadRow) {
+      const h = Math.max(nameHeadRow.getBoundingClientRect().height, dayHeadRow.getBoundingClientRect().height);
+      nameHeadRow.style.height = h + 'px';
+      dayHeadRow.style.height = h + 'px';
+    }
+    for (let i = 0; i < nameRows.length; i++) {
+      const h = Math.max(nameRows[i].getBoundingClientRect().height, dayRows[i].getBoundingClientRect().height);
+      nameRows[i].style.height = h + 'px';
+      dayRows[i].style.height = h + 'px';
+    }
+  });
+}
+
+async function renderAttendance() {
+  // ارسم فورًا من البيانات المحلية (سريع)
+  paintAttendanceTable();
+  scrollAttDays('today');
+  // اسحب أحدث نسخة من قاعدة البيانات في الخلفية وأعد الرسم لو الشاشة لسه مفتوحة على نفس التاب
+  await syncAttendanceFromDB();
+  if (document.getElementById('tab-attendance')?.classList.contains('active')) {
+    paintAttendanceTable();
+  }
+}
+
+// حمّل بيانات الحضور من اللوكال ستوريدج من أول ما الصفحة تفتح
+loadStaffAttendanceLocal();
+
+let _attResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_attResizeTimer);
+  _attResizeTimer = setTimeout(() => {
+    if (document.getElementById('tab-attendance')?.classList.contains('active')) {
+      syncAttendanceRowHeights();
+    }
+  }, 200);
+});
 
 </script>
 </body>
