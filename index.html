@@ -3084,13 +3084,36 @@ async function dbDeleteAttendance(id) {
 }
 
 async function syncAttendanceFromDB() {
+  // لو في عملية كتابة (حفظ/مسح حضور) لسه شغالة، منعملش sync دلوقتي — عشان منمسحش
+  // العلامة اللي لسه بتتحفظ (نفس مشكلة الحجوزات اللي كانت بتتقفل لوحدها قبل كده)
+  if (pendingWrites > 0) return;
   try {
-    const [staffRaw, attRaw] = await Promise.all([
-      supaFetch('staff_members?select=*'),
-      supaFetch('attendance_records?select=*')
+    const [staffRes, attRes] = await Promise.all([
+      supaFetchRaw('staff_members?select=*'),
+      supaFetchRaw('attendance_records?select=*')
     ]);
-    if (staffRaw) { staffList  = staffRaw.map(r => ({ id:r.id, name:r.name })); saveStaffLocal(); }
-    if (attRaw)   { attendance = attRaw.map(r => ({ id:r.id, staffId:r.staff_id, date:r.date, checkIn:r.check_in||null, checkOut:r.check_out||null })); saveAttendanceLocal(); }
+    // اتأكد إن مفيش كتابة بدأت أثناء ما إحنا بنجيب البيانات (race condition)
+    if (pendingWrites > 0) return;
+
+    if (staffRes.ok) { staffList = staffRes.data.map(r => ({ id:r.id, name:r.name })); saveStaffLocal(); }
+    // لو فشل تحميل الأسماء (النت مقطوع مثلاً)، ماتلمسش القايمة المحلية خالص
+
+    if (attRes.ok) {
+      // احتفظ بأي تسجيل حضور لسه مستنّي يترفع للسيرفر (موجود في قائمة إعادة المحاولة)
+      // عشان منمسحوش من الشاشة قبل ما نتأكد إنه فعلاً اترفع بنجاح
+      const pendingIds = new Set(
+        pendingSync
+          .filter(op => op.type === 'saveAttendance' || op.type === 'deleteAttendance')
+          .map(op => op.rec ? op.rec.id : op.id)
+      );
+      const fromDB = attRes.data
+        .filter(r => !pendingIds.has(r.id))
+        .map(r => ({ id:r.id, staffId:r.staff_id, date:r.date, checkIn:r.check_in||null, checkOut:r.check_out||null }));
+      const localPending = attendance.filter(a => pendingIds.has(a.id));
+      attendance = [...fromDB, ...localPending];
+      saveAttendanceLocal();
+    }
+    // لو فشل تحميل الحضور (النت مقطوع مثلاً)، سيب البيانات المحلية زي ما هي لحد ما النت يرجع
   } catch(e) { console.warn('تعذر تحميل بيانات الحضور من قاعدة البيانات:', e); }
 }
 
