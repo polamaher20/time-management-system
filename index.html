@@ -1319,7 +1319,10 @@
     </table></div>
   </div>
 
-  <div class="section-title" style="margin-top:2rem">📊 ملخص اليوم</div>
+  <div class="section-title" style="margin-top:2rem">
+    📊 ملخص اليوم
+    <button onclick="auditToday()" style="margin-right:auto;margin-left:0;padding:0.3rem 0.8rem;border-radius:7px;border:1.5px solid var(--gold);background:transparent;color:var(--gold);font-family:'Cairo',sans-serif;font-size:0.78rem;font-weight:600;cursor:pointer;" onmouseover="this.style.background='var(--gold)';this.style.color='white'" onmouseout="this.style.background='transparent';this.style.color='var(--gold)'">🔍 تدقيق ومطابقة مع السيرفر</button>
+  </div>
   <div class="history-section">
     <div class="table-wrap"><table>
       <thead>
@@ -2721,6 +2724,90 @@ function updateDailySummary() {
     </tr>`).join('');
   document.getElementById('summaryTotal').textContent =
     `إجمالي اليوم: ${totalRev} جنيه  |  إجمالي الوقت: ${totalMin} د`;
+}
+
+// ─── AUDIT & REPAIR (تدقيق ومطابقة السجل المحلي مع قاعدة البيانات) ────────────
+// بيقارن حجوزات اليوم المحفوظة محليًا مع اللي فعلاً موجود في Supabase.
+// أي حجز اتسجل على الجهاز بس فشل يترفع للسيرفر (مثلاً بسبب انقطاع نت لحظي)
+// هيظهر هنا كـ"ناقص"، ومينفع تعمله "إصلاح دلوقتي" عشان يترفع تاني ويظهر في التقرير الشهري.
+async function auditToday() {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0).getTime();
+  const dayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0,0,0,0).getTime();
+  const clearedTs = getClearedTs();
+
+  const localToday = history.filter(h =>
+    Number(h.startTime) > clearedTs && new Date(h.startTime).toDateString() === todayStr
+  );
+
+  showToast('🔍','جاري التدقيق','بنقارن السجل المحلي بقاعدة البيانات...','info');
+
+  let dbToday = [];
+  try {
+    const rows = await supaFetch(
+      `booking_history?select=*&start_time=gte.${dayStart}&start_time=lt.${dayEnd}&order=start_time.asc`
+    );
+    if (rows) {
+      dbToday = rows.map(r => ({
+        id: r.id, unitId: r.unit_id, game: r.game, name: r.name, duration: r.duration,
+        mode: r.mode, price: r.price, startTime: Number(r.start_time),
+        endTime: r.end_time ? Number(r.end_time) : null, status: r.status
+      }));
+    }
+  } catch(e) { /* هيتعامل معاها تحت كـ 0 نتائج */ }
+
+  const dbIds = new Set(dbToday.map(r => String(r.id)));
+  const missing = localToday.filter(h => !dbIds.has(String(h.id)));
+
+  showAuditResult(missing, localToday, dbToday);
+}
+
+function showAuditResult(missing, localToday, dbToday) {
+  const localRev = localToday.reduce((a,h)=>a+(h.price||0),0);
+  const dbRev = dbToday.reduce((a,h)=>a+(h.price||0),0);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:16px;padding:1.25rem;max-width:420px;width:100%;max-height:85vh;overflow:auto;text-align:right;border:2px solid var(--gold);font-family:Cairo,sans-serif;direction:rtl';
+
+  let rowsHtml;
+  if (missing.length) {
+    rowsHtml = missing.map(h => `
+      <div style="padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.82rem">
+        ${h.game} — ${h.name} — ${h.duration||0}د — <b style="color:var(--gold)">${h.price||0}ج</b> — ${formatTime(h.startTime)}
+      </div>`).join('');
+  } else {
+    rowsHtml = '<div style="padding:0.75rem;color:var(--text-muted);font-size:0.85rem;text-align:center">مفيش سجلات ناقصة من السيرفر 👍</div>';
+  }
+
+  box.innerHTML = `
+    <div style="font-weight:800;font-size:1rem;margin-bottom:0.5rem">🔍 نتيجة التدقيق</div>
+    <div style="font-size:0.85rem;margin-bottom:0.75rem;line-height:1.8">
+      محلي (الجهاز ده): <b>${localToday.length}</b> جلسة — <b style="color:var(--gold)">${localRev}ج</b><br>
+      السيرفر (اللي هيظهر في التقرير الشهري): <b>${dbToday.length}</b> جلسة — <b style="color:var(--gold)">${dbRev}ج</b><br>
+      الناقص من السيرفر: <b style="color:${missing.length?'var(--danger)':'inherit'}">${missing.length}</b> جلسة (${localRev - dbRev}ج)
+    </div>
+    <div style="max-height:40vh;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem">${rowsHtml}</div>
+    <div style="display:flex;gap:0.75rem;justify-content:center">
+      <button id="auditClose" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-weight:600;cursor:pointer">إغلاق</button>
+      ${missing.length ? `<button id="auditFix" style="flex:1;padding:0.55rem;border-radius:8px;border:none;background:var(--gold);color:white;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">إصلاح دلوقتي (رفع الناقص)</button>` : ''}
+    </div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  box.querySelector('#auditClose').onclick = () => overlay.remove();
+  const fixBtn = box.querySelector('#auditFix');
+  if (fixBtn) {
+    fixBtn.onclick = async () => {
+      fixBtn.disabled = true; fixBtn.textContent = 'جاري الرفع...';
+      for (const h of missing) { await dbSaveHistoryEntry(h); }
+      overlay.remove();
+      showToast('✅','تم الإصلاح',`تم رفع ${missing.length} جلسة ناقصة للسيرفر`,'success');
+      const monthlyTab = document.getElementById('tab-monthly');
+      if (monthlyTab && monthlyTab.classList.contains('active')) renderMonthly();
+    };
+  }
 }
 
 
