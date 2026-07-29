@@ -975,17 +975,20 @@
     padding: 0.15rem;
     margin: 0 auto;
   }
-  .att-cell.has-checkin { background: #D1FAE5; border-color: #6EE7B7; }
-  .att-cell.has-checkin.has-checkout { background: #DBEAFE; border-color: #93C5FD; }
-  .dark .att-cell.has-checkin { background: #064E3B; border-color: #0F5132; }
-  .dark .att-cell.has-checkin.has-checkout { background: #1E3A5F; border-color: #2563EB; }
-  .att-time-in  { color: #065F46; font-weight: 800; }
-  .att-time-out { color: #991B1B; font-weight: 800; }
-  .dark .att-time-in  { color: #6EE7B7; }
-  .dark .att-time-out { color: #FCA5A5; }
+  .att-cell.status-present { background: #D1FAE5; border-color: #6EE7B7; }
+  .att-cell.status-absent { background: #FEE2E2; border-color: #FCA5A5; }
+  .att-cell.status-vacation { background: #FEF3C7; border-color: #FCD34D; }
+  .dark .att-cell.status-present { background: #064E3B; border-color: #0F5132; }
+  .dark .att-cell.status-absent { background: #4C1D1D; border-color: #7F1D1D; }
+  .dark .att-cell.status-vacation { background: #4A3B0F; border-color: #8B6A2A; }
+  .att-status-label.status-present { color: #065F46; font-weight: 800; }
+  .att-status-label.status-absent { color: #991B1B; font-weight: 800; }
+  .att-status-label.status-vacation { color: #92700C; font-weight: 800; }
+  .dark .att-status-label.status-present  { color: #6EE7B7; }
+  .dark .att-status-label.status-absent { color: #FCA5A5; }
+  .dark .att-status-label.status-vacation { color: #FCD34D; }
   .att-count-cell { font-weight: 800; color: var(--gold-dim); white-space: nowrap; }
-  .att-hours-cell { font-weight: 800; color: var(--gold-dim); font-size: 0.68rem; white-space: normal; word-break: break-word; line-height: 1.25; display: inline-block; }
-  .dark .att-count-cell, .dark .att-hours-cell { color: var(--gold-light); }
+  .dark .att-count-cell { color: var(--gold-light); }
   .attendance-table thead th.att-today-col { background: rgba(201,168,76,0.22); color: var(--gold-dim); }
   .attendance-table thead th.att-weekend-col { background: rgba(107,87,68,0.14); color: var(--text-muted); }
   .dark .attendance-table thead th.att-weekend-col { background: rgba(255,255,255,0.06); }
@@ -1258,7 +1261,7 @@
     <button class="tab-btn active" onclick="switchTab('games')">🎮 الألعاب</button>
     <button class="tab-btn" onclick="switchTab('history')">📋 السجل</button>
     <button class="tab-btn" onclick="switchTab('monthly')">📅 التقرير الشهري</button>
-    <button class="tab-btn" onclick="switchTab('attendance')">🧑‍💼 الحضور والانصراف</button>
+    <button class="tab-btn" onclick="switchTab('attendance')">🧑‍💼 متابعة الحضور</button>
   </div>
 
   <!-- TAB: GAMES -->
@@ -1381,7 +1384,7 @@
 
   <!-- TAB: ATTENDANCE -->
   <div class="tab-panel" id="tab-attendance">
-    <div class="section-title" style="margin-top:0">🧑‍💼 حضور وانصراف الموظفين</div>
+    <div class="section-title" style="margin-top:0">🧑‍💼 متابعة حضور الموظفين</div>
 
     <div class="att-add-row">
       <input type="text" id="newStaffName" class="input-field" placeholder="اسم الموظف الجديد" onkeydown="if(event.key==='Enter')addStaffMember()">
@@ -1404,9 +1407,10 @@
       <button type="button" class="att-jump-btn" onclick="scrollAttDays('today')">🎯 اليوم</button>
       <button type="button" class="att-jump-btn" onclick="scrollAttDays('end')">آخر الشهر ⏭</button>
       <span class="att-legend">
-        <span class="att-legend-item"><span class="att-cell has-checkin" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> فيه حضور</span>
-        <span class="att-legend-item"><span class="att-cell has-checkin has-checkout" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> يوم كامل</span>
-        <span class="att-legend-item">دوس على أي يوم لتسجيل وقت الحضور/الانصراف</span>
+        <span class="att-legend-item"><span class="att-cell status-present" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> حاضر</span>
+        <span class="att-legend-item"><span class="att-cell status-absent" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> غائب</span>
+        <span class="att-legend-item"><span class="att-cell status-vacation" style="width:1.3rem;height:1.3rem;display:inline-flex"></span> إجازة</span>
+        <span class="att-legend-item">دوس على أي يوم لتسجيل الحالة</span>
       </span>
     </div>
 
@@ -1544,7 +1548,7 @@ async function runSyncOp(op) {
   if (op.type === 'saveAttendance') {
     await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(op.rec.id), 'DELETE');
     return (await supaFetchRaw('attendance_records', 'POST',
-      { id: op.rec.id, staff_id: op.rec.staffId, date: op.rec.date, check_in: op.rec.checkIn, check_out: op.rec.checkOut })).ok;
+      { id: op.rec.id, staff_id: op.rec.staffId, date: op.rec.date, status: op.rec.status })).ok;
   }
   if (op.type === 'deleteAttendance') {
     return (await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(op.id), 'DELETE')).ok;
@@ -3044,7 +3048,7 @@ function toggleDayDetail(id) {
 
 // ─── ATTENDANCE (حضور وانصراف الموظفين) ───────────────────────────────────────
 // staffList:   [{id, name}]
-// attendance:  [{id, staffId, date:'YYYY-MM-DD', status:'present'|'absent'}]
+// attendance:  [{id, staffId, date:'YYYY-MM-DD', status:'present'|'absent'|'vacation'}]
 // بيتخزن محليًا فورًا (سريع + شغال أوفلاين) وبيتزامن مع Supabase زي باقي السيستم.
 // لازم الجداول دي تتعمل في Supabase (شوف تعليمات الـ SQL اللي اتبعتلك):
 //   staff_members(id text primary key, name text)
@@ -3063,15 +3067,6 @@ function saveAttendanceLocal() { try { localStorage.setItem(LS_ATTEND, JSON.stri
 
 function dateKey(y, m, d) {
   return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-}
-
-// بيحوّل وقت من صيغة 24 ساعة (HH:MM) لصيغة 12 ساعة (h:MM ص/م) عشان العرض في خانات الجدول
-function formatTime12(t) {
-  if (!t) return '';
-  let [h, m] = t.split(':').map(Number);
-  const period = h < 12 ? 'ص' : 'م';
-  h = h % 12; if (h === 0) h = 12;
-  return `${h}:${String(m).padStart(2,'0')} ${period}`;
 }
 
 async function dbSaveStaff(s) {
@@ -3096,7 +3091,7 @@ async function dbSaveAttendance(rec) {
   try {
     await supaFetchRaw('attendance_records?id=eq.' + encodeURIComponent(rec.id), 'DELETE');
     const r = await supaFetchRaw('attendance_records', 'POST',
-      { id: rec.id, staff_id: rec.staffId, date: rec.date, check_in: rec.checkIn, check_out: rec.checkOut });
+      { id: rec.id, staff_id: rec.staffId, date: rec.date, status: rec.status });
     if (!r.ok) queueRetry({ type:'saveAttendance', rec });
   } finally { pendingWrites--; }
 }
@@ -3133,7 +3128,7 @@ async function syncAttendanceFromDB() {
       );
       const fromDB = attRes.data
         .filter(r => !pendingIds.has(r.id))
-        .map(r => ({ id:r.id, staffId:r.staff_id, date:r.date, checkIn:r.check_in||null, checkOut:r.check_out||null }));
+        .map(r => ({ id:r.id, staffId:r.staff_id, date:r.date, status:r.status||null }));
       const localPending = attendance.filter(a => pendingIds.has(a.id));
       attendance = [...fromDB, ...localPending];
       saveAttendanceLocal();
@@ -3175,38 +3170,32 @@ function openAttendanceEditor(staffId, dateStr, staffName) {
   const box = document.createElement('div');
   box.style.cssText = 'background:var(--surface);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;border:2px solid var(--gold);font-family:Cairo,sans-serif;direction:rtl';
   const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long'});
+  const statusOptions = [
+    { key: 'present',  label: 'حاضر',  color: 'var(--success)' },
+    { key: 'absent',   label: 'غائب',  color: 'var(--danger)' },
+    { key: 'vacation', label: 'إجازة', color: 'var(--warning)' }
+  ];
+  const optionsHtml = statusOptions.map(o => {
+    const isActive = existing?.status === o.key;
+    return `<button type="button" class="att-status-opt" data-status="${o.key}"
+        style="flex:1;padding:0.85rem 0.4rem;border-radius:10px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;font-size:0.9rem;
+        border:2px solid ${isActive ? o.color : 'var(--border)'};background:${isActive ? o.color : 'var(--surface2)'};color:${isActive ? '#fff' : 'var(--text)'}">
+        ${o.label}
+      </button>`;
+  }).join('');
   box.innerHTML = `
     <div style="text-align:center;font-weight:700;color:var(--gold);font-size:1rem;margin-bottom:0.15rem">${staffName}</div>
     <div style="text-align:center;color:var(--text-muted);font-size:0.8rem;margin-bottom:1.1rem">${dateLabel}</div>
-    <div style="display:flex;flex-direction:column;gap:0.85rem">
-      <div>
-        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.3rem">🟢 وقت الحضور</label>
-        <div style="display:flex;gap:0.5rem">
-          <input type="time" id="attInTime" value="${existing?.checkIn || ''}" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-size:0.9rem">
-          <button id="attInNow" type="button" style="padding:0 0.8rem;border-radius:8px;border:none;background:var(--success);color:white;font-weight:700;cursor:pointer;font-size:0.75rem;white-space:nowrap">الآن</button>
-        </div>
-      </div>
-      <div>
-        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.3rem">🔴 وقت الانصراف</label>
-        <div style="display:flex;gap:0.5rem">
-          <input type="time" id="attOutTime" value="${existing?.checkOut || ''}" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-size:0.9rem">
-          <button id="attOutNow" type="button" style="padding:0 0.8rem;border-radius:8px;border:none;background:var(--danger);color:white;font-weight:700;cursor:pointer;font-size:0.75rem;white-space:nowrap">الآن</button>
-        </div>
-      </div>
-    </div>
+    <div style="display:flex;gap:0.6rem">${optionsHtml}</div>
     <div style="display:flex;gap:0.6rem;justify-content:center;margin-top:1.4rem">
       <button id="attCancel" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:Cairo,sans-serif;font-weight:600;cursor:pointer">إلغاء</button>
       ${existing ? `<button id="attClear" style="flex:1;padding:0.55rem;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">مسح</button>` : ''}
-      <button id="attSave" style="flex:1;padding:0.55rem;border-radius:8px;border:none;background:var(--gold);color:#1A1208;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">حفظ</button>
     </div>`;
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
-  box.querySelector('#attInNow').onclick  = () => box.querySelector('#attInTime').value  = nowHM();
-  box.querySelector('#attOutNow').onclick = () => box.querySelector('#attOutTime').value = nowHM();
-  box.querySelector('#attCancel').onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  box.querySelector('#attCancel').onclick = () => overlay.remove();
 
   const clearBtn = box.querySelector('#attClear');
   if (clearBtn) clearBtn.onclick = () => {
@@ -3217,25 +3206,19 @@ function openAttendanceEditor(staffId, dateStr, staffName) {
     paintAttendanceTable();
   };
 
-  box.querySelector('#attSave').onclick = () => {
-    const checkIn  = box.querySelector('#attInTime').value  || null;
-    const checkOut = box.querySelector('#attOutTime').value || null;
-    if (!checkIn && !checkOut) {
-      // مفيش أي وقت متسجل — لو كان في تسجيل قديم امسحه، وإلا سيب الخانة فاضية
-      if (existing) { attendance = attendance.filter(a => a.id !== existing.id); saveAttendanceLocal(); dbDeleteAttendance(existing.id); }
+  box.querySelectorAll('.att-status-opt').forEach(btn => {
+    btn.onclick = () => {
+      const status = btn.dataset.status;
+      const id = existing?.id || `att_${staffId}_${dateStr}`;
+      const rec = { id, staffId, date: dateStr, status };
+      const idx = attendance.findIndex(a => a.id === id);
+      if (idx >= 0) attendance[idx] = rec; else attendance.push(rec);
+      saveAttendanceLocal();
+      dbSaveAttendance(rec);
       overlay.remove();
       paintAttendanceTable();
-      return;
-    }
-    const id = existing?.id || `att_${staffId}_${dateStr}`;
-    const rec = { id, staffId, date: dateStr, checkIn, checkOut };
-    const idx = attendance.findIndex(a => a.id === id);
-    if (idx >= 0) attendance[idx] = rec; else attendance.push(rec);
-    saveAttendanceLocal();
-    dbSaveAttendance(rec);
-    overlay.remove();
-    paintAttendanceTable();
-  };
+    };
+  });
 }
 
 // بيسكرول جدول الأيام لأول الشهر / اليوم الحالي / آخر الشهر — مفيد لو فيه
@@ -3272,7 +3255,7 @@ function paintAttendanceTable() {
     const cls = [isToday ? 'att-today-col' : '', !isToday && isWeekend ? 'att-weekend-col' : ''].join(' ').trim();
     headHtml += `<th class="${cls}"><span class="att-day-num">${d}</span><span class="att-day-wd">${wdShort[dow]}</span></th>`;
   }
-  headHtml += '<th class="att-summary-cell">أيام الحضور</th><th class="att-summary-cell">إجمالي الساعات</th>';
+  headHtml += '<th class="att-summary-cell">أيام الحضور</th><th class="att-summary-cell">أيام الغياب</th><th class="att-summary-cell">أيام الإجازة</th>';
   headEl.innerHTML = headHtml;
 
   const namesBodyEl = document.getElementById('attendanceNamesBody');
@@ -3280,7 +3263,7 @@ function paintAttendanceTable() {
 
   if (!staffList.length) {
     namesBodyEl.innerHTML = '<tr><td class="att-name-cell">&nbsp;</td></tr>';
-    bodyEl.innerHTML = `<tr><td colspan="${daysInMonth + 2}" class="empty-history">لسه مفيش أسماء — ضيف اسم موظف من فوق</td></tr>`;
+    bodyEl.innerHTML = `<tr><td colspan="${daysInMonth + 3}" class="empty-history">لسه مفيش أسماء — ضيف اسم موظف من فوق</td></tr>`;
     syncAttendanceRowHeights();
     return;
   }
@@ -3288,9 +3271,14 @@ function paintAttendanceTable() {
   let namesHtml = '';
   let bodyHtml = '';
 
+  const statusMeta = {
+    present:  { cls: 'status-present',  label: 'حاضر' },
+    absent:   { cls: 'status-absent',   label: 'غائب' },
+    vacation: { cls: 'status-vacation', label: 'إجازة' }
+  };
+
   staffList.forEach(s => {
-    let presentDays = 0;
-    let totalMinutes = 0;
+    let presentDays = 0, absentDays = 0, vacationDays = 0;
     let cells = '';
     const safeName = s.name.replace(/'/g, "\\'");
     for (let d = 1; d <= daysInMonth; d++) {
@@ -3299,23 +3287,14 @@ function paintAttendanceTable() {
       const dow = new Date(year, month, d).getDay();
       const isToday = new Date(year, month, d).toDateString() === todayStr;
       const isWeekend = (dow === 5 || dow === 6);
-      const hasIn = !!rec?.checkIn, hasOut = !!rec?.checkOut;
-      if (hasIn) presentDays++;
-      if (hasIn && hasOut) {
-        const [ih, im] = rec.checkIn.split(':').map(Number);
-        const [oh, om] = rec.checkOut.split(':').map(Number);
-        let mins = (oh * 60 + om) - (ih * 60 + im);
-        if (mins < 0) mins += 24 * 60; // شفت بيعدي نص الليل
-        totalMinutes += mins;
-      }
-      const cellCls = 'att-cell' + (hasIn ? ' has-checkin' : '') + (hasOut ? ' has-checkout' : '');
-      const inner = (hasIn || hasOut)
-        ? `${hasIn ? `<span class="att-time-in">${formatTime12(rec.checkIn)}</span>` : ''}${hasOut ? `<span class="att-time-out">${formatTime12(rec.checkOut)}</span>` : ''}`
-        : '';
+      const meta = rec?.status ? statusMeta[rec.status] : null;
+      if (rec?.status === 'present') presentDays++;
+      else if (rec?.status === 'absent') absentDays++;
+      else if (rec?.status === 'vacation') vacationDays++;
+      const cellCls = 'att-cell' + (meta ? ' ' + meta.cls : '');
+      const inner = meta ? `<span class="att-status-label ${meta.cls}">${meta.label}</span>` : '';
       cells += `<td><div class="${cellCls}" onclick="openAttendanceEditor('${s.id}','${dateStr}','${safeName}')">${inner}</div></td>`;
     }
-    const hrs = Math.floor(totalMinutes / 60), mins = totalMinutes % 60;
-    const hoursLabel = totalMinutes > 0 ? `${hrs} س ${mins} د` : '—';
     const initials = s.name.trim().slice(0, 1).toUpperCase();
 
     namesHtml += `<tr>
@@ -3329,7 +3308,8 @@ function paintAttendanceTable() {
     bodyHtml += `<tr>
       ${cells}
       <td class="att-summary-cell"><span class="att-count-cell">${presentDays}</span></td>
-      <td class="att-summary-cell"><span class="att-hours-cell">${hoursLabel}</span></td>
+      <td class="att-summary-cell"><span class="att-count-cell">${absentDays}</span></td>
+      <td class="att-summary-cell"><span class="att-count-cell">${vacationDays}</span></td>
     </tr>`;
   });
 
